@@ -8,8 +8,8 @@ import os
 class Settings:
     app_name: str = "SupportIQ"
     data_dir: Path = Path(os.getenv("DATA_DIR", "data"))
-    sample_dir: Path = "sample_corpus"
-    embedding_model: str = os.getenv("EMBEDDING_MODEL")
+    sample_dir: Path = Path(os.getenv("DATA_DIR", "sample_corpus"))
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
     default_provider: str = os.getenv("DEFAULT_PROVIDER", "template")
     default_model: str = os.getenv("SUPPORTIQ_DEFAULT_MODEL", "")
     max_context_chunks: int = int(os.getenv("SUPPORTIQ_MAX_CONTEXT_CHUNKS", "5"))
