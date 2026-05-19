@@ -1,0 +1,18 @@
+# Environment
+.env
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data
+/data/
+/results/
+
+/docs/
+# OS
+.DS_Store
