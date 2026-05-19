@@ -1,4 +1,4 @@
-name: SupportIQ CI
+name: GroundDesk CI
 
 on:
   push:

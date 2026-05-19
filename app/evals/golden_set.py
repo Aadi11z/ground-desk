@@ -1,4 +1,4 @@
-"""Lightweight golden-set evaluation for SupportIQ."""
+"""Lightweight golden-set evaluation for GroundDesk."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ GOLDEN_SET = [
     EvalCase("Can I export invoices from the billing page?", ("invoice", "billing")),
     EvalCase("What should I do if SSO users cannot sign in?", ("sso", "identity")),
     EvalCase("Do you support refunds for annual plans?", ("refund", "annual")),
-    EvalCase("Can SupportIQ configure my unrelated payroll software?", tuple(), should_escalate=True),
+    EvalCase("Can GroundDesk configure my unrelated payroll software?", tuple(), should_escalate=True),
 ]
 
 

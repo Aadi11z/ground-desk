@@ -1,4 +1,4 @@
-"""FastAPI application for SupportIQ."""
+"""FastAPI application for GroundDesk."""
 
 from __future__ import annotations
 

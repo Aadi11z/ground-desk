@@ -1,6 +1,6 @@
-# SupportIQ
+# GroundDesk
 
-SupportIQ is an end-to-end Generative AI support-agent project built to show the practical skills expected from an AI engineer: RAG, LLM API integration, structured generation, evals, safety checks, FastAPI, Gradio, Docker, CI, and Cloud Run deployment.
+GroundDesk is an end-to-end Generative AI support-agent project built to show the practical skills expected from an AI engineer: RAG, LLM API integration, structured generation, evals, safety checks, FastAPI, Gradio, Docker, CI, and Cloud Run deployment.
 
 It ingests support documentation, retrieves relevant evidence, generates cited answers, drafts customer-support replies, flags low-confidence cases for escalation, and exposes both production APIs and a portfolio-friendly web demo.
 
@@ -113,8 +113,8 @@ docs/                   Project docs and roadmap
 Build locally:
 
 ```bash
-docker build -t supportiq .
-docker run --rm -p 8080:8080 supportiq
+docker build -t ground-desk .
+docker run --rm -p 8080:8080 ground-desk
 ```
 
 Deploy to Cloud Run using [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

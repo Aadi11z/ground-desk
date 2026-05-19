@@ -61,7 +61,7 @@ def load_path(
 def load_url(url: str) -> LoadedDocument:
     canonical_url = _canonicalize_url(url)
     _validate_public_url(canonical_url)
-    request = Request(canonical_url, headers={"User-Agent": "SupportIQ/0.1"})
+    request = Request(canonical_url, headers={"User-Agent": "GroundDesk/0.1"})
     with urlopen(request, timeout=20) as response:
         raw = response.read()
         content_type = response.headers.get("content-type", "")

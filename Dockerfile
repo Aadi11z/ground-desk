@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV DATA_DIR=/app/supportiq_data
+ENV DATA_DIR=/app/grounddesk_data
 
 WORKDIR /app
 

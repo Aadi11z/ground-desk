@@ -1,4 +1,4 @@
-"""Convenience entry point for the SupportIQ Gradio demo."""
+"""Convenience entry point for the GroundDesk Gradio demo."""
 
 from app.interfaces.ui import build_interface
 
