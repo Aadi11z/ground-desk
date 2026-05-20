@@ -333,7 +333,7 @@ def demo_product_html() -> str:
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Request failed");
-        el("answer").textContent = data.answer || "No answer returned.";
+        el("answer").textContent = cleanAnswer(data.answer || "No answer returned.");
         const confidence = Math.round((data.confidence || 0) * 100);
         el("confidence").textContent = `Confidence: ${confidence}%`;
         el("confidence").className = `metric ${confidence >= 60 ? "good" : "warn"}`;
@@ -392,6 +392,14 @@ def demo_product_html() -> str:
       return String(value).replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
       }[c]));
+    }
+
+    function cleanAnswer(value) {
+      return String(value)
+        .replace(/\{?\s*chunk_id\s*:\s*[^}\s]+(?:\s*\})?/gi, "")
+        .replace(/\s+([.,;:!?])/g, "$1")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim();
     }
 
     renderSamples();
