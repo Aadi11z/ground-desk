@@ -30,6 +30,8 @@ class Settings:
     )
     generation_provider: str = _env("GROUNDDESK_GENERATION_PROVIDER", "gemini")
     generation_model: str = _env("GROUNDDESK_GENERATION_MODEL", "gemini-2.5-flash")
+    admin_api_key: str = _env("GROUNDDESK_ADMIN_API_KEY", "")
+    default_workspace_id: str = _env("GROUNDDESK_DEFAULT_WORKSPACE_ID", "demo")
     max_context_chunks: int = int(_env("GROUNDDESK_MAX_CONTEXT_CHUNKS", "5"))
     min_confidence: float = float(_env("GROUNDDESK_MIN_CONFIDENCE", "0.35"))
     retrieval_mode: str = _env("GROUNDDESK_RETRIEVAL_MODE", "adaptive")

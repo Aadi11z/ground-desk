@@ -33,7 +33,11 @@ class SupportAgent:
         trace_id = uuid.uuid4().hex[:12]
         start = time.time()
         query_vectors = self.embeddings.encode_queries([request.question])
-        document_ids = _matching_document_ids(self.store, request)
+        document_ids = _matching_document_ids(
+            self.store,
+            request,
+            default_workspace_id=self.settings.default_workspace_id,
+        )
         results = self.retriever.retrieve(
             request.question,
             query_vectors.vectors,
@@ -120,7 +124,7 @@ def _snippet(text: str, limit: int = 260) -> str:
     return cleaned[: limit - 3].rstrip() + "..."
 
 
-def _matching_document_ids(store: VectorStoreBackend, request: ChatRequest) -> set[str] | None:
+def _matching_document_ids(store: VectorStoreBackend, request: ChatRequest, *, default_workspace_id: str) -> set[str] | None:
     filters = request.filters
     if filters is None:
         return None
@@ -132,10 +136,16 @@ def _matching_document_ids(store: VectorStoreBackend, request: ChatRequest) -> s
             continue
         if filters.titles and document.title not in filters.titles:
             continue
-        if any(document.metadata.get(key) != value for key, value in filters.metadata.items()):
+        if any(_metadata_value(document.metadata, key, default_workspace_id=default_workspace_id) != value for key, value in filters.metadata.items()):
             continue
         matched.append(document.document_id)
     return set(matched)
+
+
+def _metadata_value(metadata: dict[str, str], key: str, *, default_workspace_id: str) -> str | None:
+    if key == "workspace_id":
+        return metadata.get(key) or default_workspace_id
+    return metadata.get(key)
 
 
 def _has_strong_lexical_support(question: str, results) -> bool:

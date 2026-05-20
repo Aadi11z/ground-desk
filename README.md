@@ -12,16 +12,25 @@ source venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pytest -q
-uvicorn app.interfaces.api:app --reload
+
+cp .env.example .env
+# edit .env and set GEMINI_API_KEY
+
+docker compose up -d qdrant
+curl -X DELETE http://localhost:6333/collections/grounddesk_chunks
+rm -rf data/index data/documents
+
+python -m uvicorn app.interfaces.api:app --reload
 ```
 
 Open the demo:
 
 ```text
-http://localhost:8000/demo
+http://localhost:8000
 ```
 
 The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
+The Gradio admin/demo UI remains available at `http://localhost:8000/demo`.
 
 ## Core Features
 
@@ -37,6 +46,8 @@ The app automatically indexes the bundled documents in `sample_corpus/` when no 
 - Synthetic eval-data generation plus retrieval/answer-quality metrics.
 - Local chat-history, feedback, analytics, and object-storage scaffolding.
 - Gemini-only generation using the server-side `GEMINI_API_KEY`.
+- Workspace-scoped retrieval with `X-Workspace-ID`.
+- Admin API-key protection for ingestion, delete, eval, history, analytics, and workflow endpoints.
 - Deterministic template generation for offline tests and eval scaffolding.
 - Deterministic hashing embeddings for offline tests and demos.
 - Optional public pretrained embeddings with `BAAI/bge-small-en-v1.5`.
@@ -70,6 +81,7 @@ GET    /api/workflows/documents/{document_id}/changelog-summary
 POST   /api/feedback
 GET    /api/history
 GET    /api/analytics
+GET    /
 GET    /demo
 ```
 
@@ -78,12 +90,15 @@ Example:
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
+  -H "X-Workspace-ID: demo" \
   -d '{
     "question": "How long do password reset emails take?",
     "top_k": 5,
     "draft_ticket_reply": true
   }'
 ```
+
+Admin endpoints use `X-Admin-API-Key` when `GROUNDDESK_ADMIN_API_KEY` is set.
 
 ## Project Layout
 

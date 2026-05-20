@@ -180,10 +180,15 @@ class LocalVectorStore:
         return list(self.records)
 
     def list_documents(self) -> list[DocumentManifest]:
-        return list(self.documents.values())
+        if self.documents:
+            return list(self.documents.values())
+        return list(_reconstruct_documents(self.list_chunks()).values())
 
     def get_document(self, document_id: str) -> DocumentManifest | None:
-        return self.documents.get(document_id)
+        document = self.documents.get(document_id)
+        if document is not None:
+            return document
+        return _reconstruct_documents(self.list_chunks()).get(document_id)
 
     @property
     def documents_path(self) -> Path:

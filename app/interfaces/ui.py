@@ -32,7 +32,7 @@ def _services(agent_override=None, ingestion_override=None, store_override=None)
 
 def ensure_sample_data(ingestion_service: IngestionService, vector_store: VectorStoreBackend) -> str:
     if not vector_store.has_records():
-        records = ingestion_service.ingest_sample_corpus()
+        records = ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
         return f"Loaded {len(records)} sample documents."
     return f"Ready with {len(ingestion_service.list_documents())} documents and {vector_store.count_chunks()} chunks."
 

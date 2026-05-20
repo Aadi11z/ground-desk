@@ -74,7 +74,10 @@ class HybridRetriever:
             else self._static_plan(query)
         )
         mode = self._mode(plan.mode)
-        coarse_vector_name = getattr(self.store, "default_vector_name", None) or _smallest_vector_name(query_embeddings)
+        coarse_vector_name = _select_query_vector_name(
+            query_embeddings,
+            preferred=getattr(self.store, "default_vector_name", None),
+        )
         if plan.analysis.out_of_scope:
             self.last_diagnostics = RetrievalDiagnostics(
                 mode=mode,
@@ -352,6 +355,12 @@ def _reciprocal_rank_fusion(
 
 def _smallest_vector_name(vectors: dict[str, np.ndarray]) -> str:
     return min(vectors, key=lambda name: vectors[name].shape[1])
+
+
+def _select_query_vector_name(vectors: dict[str, np.ndarray], *, preferred: str | None) -> str:
+    if preferred in vectors:
+        return str(preferred)
+    return _smallest_vector_name(vectors)
 
 
 def _query_vector(vectors: dict[str, np.ndarray], vector_name: str) -> np.ndarray:

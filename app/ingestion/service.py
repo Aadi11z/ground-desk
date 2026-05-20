@@ -32,6 +32,7 @@ class IngestionService:
         source: str | None = None,
         title: str | None = None,
         original_filename: str | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> DocumentRecord:
         loaded = load_path(
             path,
@@ -40,18 +41,20 @@ class IngestionService:
             title=title,
             original_filename=original_filename,
         )
+        loaded = _with_metadata(loaded, metadata)
         record = self.ingest_loaded(loaded, document_id=document_id)
         self.object_store.put(path, key=f"{record.document_id}{path.suffix.lower()}")
         return record
 
-    def ingest_url(self, url: str) -> DocumentRecord:
-        return self.ingest_loaded(load_url(url))
+    def ingest_url(self, url: str, *, metadata: dict[str, str] | None = None) -> DocumentRecord:
+        return self.ingest_loaded(_with_metadata(load_url(url), metadata))
 
     def create_uploaded_document(
         self,
         path: Path,
         *,
         original_filename: str,
+        metadata: dict[str, str] | None = None,
     ) -> DocumentRecord:
         document_id = _new_document_id()
         return self.ingest_path(
@@ -61,6 +64,7 @@ class IngestionService:
             source=original_filename,
             title=Path(original_filename).stem,
             original_filename=original_filename,
+            metadata=metadata,
         )
 
     def replace_uploaded_document(
@@ -69,12 +73,15 @@ class IngestionService:
         path: Path,
         *,
         original_filename: str,
+        metadata: dict[str, str] | None = None,
     ) -> DocumentRecord:
         existing = self.store.get_document(document_id)
         if existing is None:
             raise KeyError(f"Unknown document_id: {document_id}")
         if not existing.source_id.startswith("document:"):
             raise ValueError("Only uploaded documents can be replaced through this endpoint.")
+        replacement_metadata = dict(existing.metadata)
+        replacement_metadata.update(metadata or {})
         return self.ingest_path(
             path,
             document_id=document_id,
@@ -82,6 +89,7 @@ class IngestionService:
             source=original_filename,
             title=Path(original_filename).stem,
             original_filename=original_filename,
+            metadata=replacement_metadata,
         )
 
     def ingest_loaded(self, loaded: LoadedDocument, *, document_id: str | None = None) -> DocumentRecord:
@@ -155,19 +163,26 @@ class IngestionService:
         self.store.upsert_document(manifest, records, vector_batch.vectors)
         return _document_record(manifest)
 
-    def ingest_sample_corpus(self) -> list[DocumentRecord]:
+    def ingest_sample_corpus(self, *, metadata: dict[str, str] | None = None) -> list[DocumentRecord]:
         if not self.settings.sample_dir.exists():
             return []
         records = []
         for path in sorted(self.settings.sample_dir.glob("*")):
             if path.is_file() and path.suffix.lower() in {".md", ".txt", ".pdf"}:
-                records.append(self.ingest_path(path))
+                records.append(self.ingest_path(path, metadata=metadata))
         return records
 
-    def list_documents(self) -> list[DocumentRecord]:
+    def list_documents(self, *, metadata_filter: dict[str, str] | None = None) -> list[DocumentRecord]:
+        documents = self.store.list_documents()
+        if metadata_filter:
+            documents = [
+                document
+                for document in documents
+                if _metadata_matches_filter(document.metadata, metadata_filter, default_workspace_id=self.settings.default_workspace_id)
+            ]
         return [
             _document_record(document)
-            for document in sorted(self.store.list_documents(), key=lambda item: item.title.lower())
+            for document in sorted(documents, key=lambda item: item.title.lower())
         ]
 
 
@@ -186,7 +201,35 @@ def _document_record(manifest: DocumentManifest) -> DocumentRecord:
         status=manifest.status,
         warnings=list(manifest.warnings),
         diagnostics=manifest.diagnostics,
+        metadata=manifest.metadata,
     )
+
+
+def _with_metadata(loaded: LoadedDocument, metadata: dict[str, str] | None) -> LoadedDocument:
+    if not metadata:
+        return loaded
+    merged = dict(loaded.metadata)
+    merged.update({str(key): str(value) for key, value in metadata.items()})
+    return LoadedDocument(
+        title=loaded.title,
+        text=loaded.text,
+        source_type=loaded.source_type,
+        source=loaded.source,
+        source_id=loaded.source_id,
+        original_filename=loaded.original_filename,
+        sections=loaded.sections,
+        metadata=merged,
+    )
+
+
+def _metadata_matches_filter(metadata: dict[str, str], filters: dict[str, str], *, default_workspace_id: str) -> bool:
+    for key, expected in filters.items():
+        actual = metadata.get(key)
+        if key == "workspace_id":
+            actual = actual or default_workspace_id
+        if actual != expected:
+            return False
+    return True
 
 
 def _document_id(source_id: str) -> str:

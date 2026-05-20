@@ -8,14 +8,16 @@ from app.core.config import Settings
 from app.ingestion.loaders import LoadedDocument
 from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
 from app.retrieval.retriever import HybridRetriever
+from app.retrieval.retriever import _select_query_vector_name
 from app.retrieval.adaptive import AdaptiveQueryPlanner
 from app.retrieval.compression import compress_results
 from app.retrieval.rerank import LexicalFinalReranker
 from app.ingestion.service import IngestionService
 from app.core.models import ChatRequest
 from app.core.safety import redact_secrets, strip_prompt_injection
+from app.core.workspace import apply_workspace_filter, metadata_matches_workspace, normalize_workspace_id
 from app.retrieval.vector_store import LocalVectorStore, VectorStore
-from app.retrieval.vector_store import ChunkRecord, DocumentManifest, SearchResult
+from app.retrieval.vector_store import ChunkRecord, DocumentManifest, SearchResult, _reconstruct_documents
 from app.retrieval.factory import create_vector_store
 from app.evals.retrieval import run_retrieval_evals
 from app.evals.answers import run_answer_quality_evals
@@ -133,6 +135,36 @@ def test_uploaded_document_replacement_is_explicit(tmp_path):
     assert len(store.documents) == 1
     assert len(store.records) == 1
     assert store.records[0].text == "Beta guidance."
+
+
+def test_ingestion_persists_workspace_metadata_and_filters_documents(tmp_path):
+    ingestion, _, store = make_agent(tmp_path)
+    ingestion.ingest_loaded(
+        LoadedDocument(
+            title="Alpha Auth",
+            text="Password reset emails arrive within five minutes.",
+            source_type="txt",
+            source="memory",
+            source_id="memory:alpha-auth",
+            metadata={"workspace_id": "alpha"},
+        )
+    )
+    ingestion.ingest_loaded(
+        LoadedDocument(
+            title="Beta Billing",
+            text="Invoices are available from Settings Billing Invoices.",
+            source_type="txt",
+            source="memory",
+            source_id="memory:beta-billing",
+            metadata={"workspace_id": "beta"},
+        )
+    )
+
+    alpha_documents = ingestion.list_documents(metadata_filter={"workspace_id": "alpha"})
+
+    assert len(alpha_documents) == 1
+    assert alpha_documents[0].metadata["workspace_id"] == "alpha"
+    assert store.documents[alpha_documents[0].document_id].metadata["workspace_id"] == "alpha"
 
 
 def test_short_chunks_are_skipped_with_warning(tmp_path):
@@ -302,6 +334,23 @@ def test_local_store_supports_multiple_dense_vector_fields(tmp_path):
     assert set(store.fetch_vectors(["refund"], vector_name="dense_4")) == {"refund"}
 
 
+def test_qdrant_style_store_can_reconstruct_documents_from_chunks():
+    record = ChunkRecord(
+        chunk_id="refund",
+        document_id="doc-refund",
+        version_id="v1",
+        title="Billing",
+        source_type="md",
+        source="billing.md",
+        text="Refund guidance.",
+        position=0,
+    )
+    reconstructed = list(_reconstruct_documents([record]).values())
+
+    assert reconstructed[0].document_id == "doc-refund"
+    assert reconstructed[0].title == "Billing"
+
+
 def test_mrl_rerank_uses_largest_vector_field(tmp_path):
     store = LocalVectorStore(tmp_path / "index")
     first = ChunkRecord(
@@ -360,6 +409,12 @@ def test_mrl_rerank_uses_largest_vector_field(tmp_path):
     )
 
     assert results[0].record.chunk_id == "second"
+
+
+def test_retriever_falls_back_when_store_vector_name_is_stale():
+    query_embeddings = {"dense_768": np.ones((1, 768), dtype=np.float32)}
+
+    assert _select_query_vector_name(query_embeddings, preferred="dense_384") == "dense_768"
 
 
 def test_retrieval_eval_reports_ranking_metrics(tmp_path):
@@ -568,6 +623,18 @@ def test_non_matching_metadata_filter_returns_no_citations(tmp_path):
 
     assert response.citations == []
     assert response.needs_escalation
+
+
+def test_workspace_helpers_force_workspace_scope():
+    scoped = apply_workspace_filter(
+        ChatRequest(question="How do resets work?", filters={"metadata": {"plan": "plus"}}),
+        "alpha",
+    )
+
+    assert scoped.filters is not None
+    assert scoped.filters.metadata == {"plan": "plus", "workspace_id": "alpha"}
+    assert normalize_workspace_id(None, default="demo") == "demo"
+    assert metadata_matches_workspace({}, "demo", default="demo")
 
 
 def test_out_of_scope_queries_short_circuit_to_escalation(tmp_path):

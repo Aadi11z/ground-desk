@@ -53,6 +53,7 @@ class DocumentRecord(BaseModel):
     status: str
     warnings: list[str] = Field(default_factory=list)
     diagnostics: dict[str, int] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class DocumentIngestResponse(BaseModel):
