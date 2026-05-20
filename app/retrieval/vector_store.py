@@ -579,6 +579,7 @@ class QdrantVectorStore:
                 f"{expected}, but ingestion produced {actual}. Reindex before mixing embeddings."
             )
         self._ensure_collection(dimensions)
+        self._ensure_payload_indexes()
         self.index_metadata = proposed
         self.save()
 
@@ -705,6 +706,24 @@ class QdrantVectorStore:
                 for vector_name, dimension in dimensions.items()
             },
         )
+
+    def _ensure_payload_indexes(self) -> None:
+        if not self._collection_exists():
+            return
+        from qdrant_client import models
+
+        for field_name in ("document_id", "source_type", "title"):
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field_name,
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                    wait=True,
+                )
+            except Exception as exc:
+                message = str(exc).lower()
+                if "already exists" not in message and "already has" not in message:
+                    raise
 
     def _count_document_points(self, document_id: str) -> int:
         from qdrant_client import models
