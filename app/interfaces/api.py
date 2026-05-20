@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 import gradio as gr
 
 from ..generation.agent import SupportAgent
@@ -142,9 +142,9 @@ def delete_document(document_id: str):
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest, x_llm_api_key: str | None = Header(default=None)):
+def chat(request: ChatRequest):
     try:
-        response = agent.answer(request, api_key=x_llm_api_key)
+        response = agent.answer(request)
         chat_history_repo.append(
             {
                 "conversation_id": request.conversation_id,
@@ -186,11 +186,7 @@ def retrieval_variant_evals():
 
 @app.post("/api/workflows/escalation-note")
 def escalation_note(request: WorkflowRequest):
-    return workflows.escalation_note(
-        request.question,
-        provider=request.provider,
-        model=request.model,
-    )
+    return workflows.escalation_note(request.question)
 
 
 @app.post("/api/workflows/conversation-summary")

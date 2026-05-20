@@ -10,8 +10,8 @@ class SupportWorkflowService:
     def __init__(self, agent: SupportAgent):
         self.agent = agent
 
-    def escalation_note(self, question: str, *, provider: str = "template", model: str | None = None) -> dict:
-        response = self.agent.answer(ChatRequest(question=question, provider=provider, model=model))
+    def escalation_note(self, question: str) -> dict:
+        response = self.agent.answer(ChatRequest(question=question), force_template=True)
         note = (
             f"Escalation needed for query: {question}\n"
             f"Current answer confidence: {response.confidence}\n"
@@ -58,7 +58,7 @@ class SupportWorkflowService:
         }
 
     def knowledge_gap(self, question: str) -> dict:
-        response = self.agent.answer(ChatRequest(question=question, provider="template"))
+        response = self.agent.answer(ChatRequest(question=question), force_template=True)
         return {
             "question": question,
             "knowledge_gap": response.needs_escalation or not response.citations,

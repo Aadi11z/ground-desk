@@ -6,7 +6,7 @@ from app.generation.agent import SupportAgent
 from app.generation.workflows import SupportWorkflowService
 from app.core.config import Settings
 from app.ingestion.loaders import LoadedDocument
-from app.retrieval.embeddings import EmbeddingModel
+from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
 from app.retrieval.retriever import HybridRetriever
 from app.retrieval.adaptive import AdaptiveQueryPlanner
 from app.retrieval.compression import compress_results
@@ -24,7 +24,7 @@ from app.evals.variants import compare_retrieval_variants
 
 
 def make_agent(tmp_path: Path):
-    settings = Settings(data_dir=tmp_path / "data", sample_dir=tmp_path / "samples")
+    settings = Settings(data_dir=tmp_path / "data", sample_dir=tmp_path / "samples", generation_provider="template")
     embeddings = EmbeddingModel("unit-test")
     store = VectorStore(settings.index_dir)
     ingestion = IngestionService(settings, embeddings, store)
@@ -46,7 +46,7 @@ def test_ingestion_and_grounded_answer(tmp_path):
     assert record.chunks_indexed == 1
     assert len(store.records) == 1
 
-    response = agent.answer(ChatRequest(question="How long do password reset emails take?", provider="template"))
+    response = agent.answer(ChatRequest(question="How long do password reset emails take?"))
     assert "password" in response.answer.lower()
     assert response.citations
     assert not response.needs_escalation
@@ -54,7 +54,7 @@ def test_ingestion_and_grounded_answer(tmp_path):
 
 def test_empty_corpus_escalates(tmp_path):
     _, agent, _ = make_agent(tmp_path)
-    response = agent.answer(ChatRequest(question="Can you configure payroll?", provider="template"))
+    response = agent.answer(ChatRequest(question="Can you configure payroll?"))
     assert response.needs_escalation
     assert response.confidence == 0
 
@@ -171,7 +171,12 @@ def test_low_value_url_text_is_indexed_with_warning(tmp_path):
 
 
 def test_vector_store_factory_defaults_to_local_backend(tmp_path):
-    settings = Settings(data_dir=tmp_path / "data", sample_dir=tmp_path / "samples")
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        sample_dir=tmp_path / "samples",
+        generation_provider="template",
+        vector_store_backend="local",
+    )
     store = create_vector_store(settings)
 
     assert isinstance(store, LocalVectorStore)
@@ -457,7 +462,6 @@ def test_metadata_filters_limit_retrieval_to_matching_documents(tmp_path):
     response = agent.answer(
         ChatRequest(
             question="How long do password reset emails take?",
-            provider="template",
             filters={"metadata": {"workspace": "alpha"}},
         )
     )
@@ -524,10 +528,22 @@ def test_workflow_service_and_extended_evals(tmp_path):
 
 def test_gemini_without_api_key_falls_back_without_sentence_transformer(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    embeddings = EmbeddingModel("gemini-embedding-001", provider="auto")
+    embeddings = EmbeddingModel("gemini-embedding-2", provider="auto")
 
     assert embeddings.backend == "hashing"
     assert embeddings.mrl_dimensions == (384,)
+
+
+def test_gemini_embedding_2_uses_prompt_prefixes_instead_of_task_type():
+    assert _format_embedding_2_content(
+        "How do password resets work?",
+        task_type="RETRIEVAL_QUERY",
+    ) == "task: question answering | query: How do password resets work?"
+    assert _format_embedding_2_content(
+        "Password reset emails arrive within five minutes.",
+        task_type="RETRIEVAL_DOCUMENT",
+        title="Authentication",
+    ) == "title: Authentication | text: Password reset emails arrive within five minutes."
 
 
 def test_non_matching_metadata_filter_returns_no_citations(tmp_path):
@@ -546,7 +562,6 @@ def test_non_matching_metadata_filter_returns_no_citations(tmp_path):
     response = agent.answer(
         ChatRequest(
             question="How long do password reset emails take?",
-            provider="template",
             filters={"metadata": {"workspace": "missing"}},
         )
     )
@@ -567,7 +582,7 @@ def test_out_of_scope_queries_short_circuit_to_escalation(tmp_path):
         )
     )
 
-    response = agent.answer(ChatRequest(question="Can you configure payroll?", provider="template"))
+    response = agent.answer(ChatRequest(question="Can you configure payroll?"))
 
     assert response.citations == []
     assert response.needs_escalation

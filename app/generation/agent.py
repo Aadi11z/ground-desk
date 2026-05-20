@@ -8,7 +8,7 @@ import uuid
 
 from ..core.config import Settings
 from ..retrieval.embeddings import EmbeddingModel
-from .llm import get_provider
+from .llm import get_generation_provider
 from ..core.models import ChatRequest, ChatResponse, Citation
 from ..core.safety import redact_secrets, strip_prompt_injection
 from ..retrieval.lexical import tokenize
@@ -29,7 +29,7 @@ class SupportAgent:
         self.store = store
         self.retriever = HybridRetriever(settings, store, embeddings=embeddings)
 
-    def answer(self, request: ChatRequest, api_key: str | None = None) -> ChatResponse:
+    def answer(self, request: ChatRequest, *, force_template: bool = False) -> ChatResponse:
         trace_id = uuid.uuid4().hex[:12]
         start = time.time()
         query_vectors = self.embeddings.encode_queries([request.question])
@@ -73,8 +73,9 @@ class SupportAgent:
             f"{json.dumps(evidence, ensure_ascii=False)}"
         )
 
-        provider = get_provider(request.provider)
-        raw = provider.generate_json(SYSTEM_PROMPT, user_prompt, api_key=api_key, model=request.model)
+        use_template = force_template or self.settings.generation_provider.lower() == "template"
+        provider = get_generation_provider(use_template=use_template)
+        raw = provider.generate_json(SYSTEM_PROMPT, user_prompt, model=self.settings.generation_model)
         answer = str(raw.get("answer") or "I do not have enough evidence to answer this.")
         confidence = _clamp_float(raw.get("confidence", 0.0))
 

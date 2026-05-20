@@ -156,20 +156,25 @@ class EmbeddingModel:
 
         vectors = []
         for text, title in zip(texts, titles, strict=True):
-            config_kwargs = {
-                "task_type": task_type,
-                "output_dimensionality": output_dimensionality,
-            }
-            if task_type == "RETRIEVAL_DOCUMENT" and title:
-                config_kwargs["title"] = title
+            content = text
+            config_kwargs = {"output_dimensionality": output_dimensionality}
+            if self._uses_embedding_2():
+                content = _format_embedding_2_content(text, task_type=task_type, title=title)
+            else:
+                config_kwargs["task_type"] = task_type
+                if task_type == "RETRIEVAL_DOCUMENT" and title:
+                    config_kwargs["title"] = title
             result = self._gemini_client.models.embed_content(
                 model=self.model_name,
-                contents=text,
+                contents=content,
                 config=types.EmbedContentConfig(**config_kwargs),
             )
             embedding = result.embeddings[0]
             vectors.append(np.asarray(embedding.values, dtype=np.float32))
         return _normalize_rows(np.vstack(vectors))
+
+    def _uses_embedding_2(self) -> bool:
+        return self.model_name == "gemini-embedding-2"
 
     def _should_use_gemini(self) -> bool:
         if self.provider == "gemini":
@@ -211,3 +216,12 @@ def _normalize_rows(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return matrix / norms
+
+
+def _format_embedding_2_content(text: str, *, task_type: str, title: str | None = None) -> str:
+    if task_type == "RETRIEVAL_DOCUMENT":
+        document_title = title or "none"
+        return f"title: {document_title} | text: {text}"
+    if task_type == "RETRIEVAL_QUERY":
+        return f"task: question answering | query: {text}"
+    return text

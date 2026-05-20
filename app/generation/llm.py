@@ -1,4 +1,4 @@
-"""LLM provider abstraction for structured support answers."""
+"""Gemini generation helpers for structured support answers."""
 
 from __future__ import annotations
 
@@ -8,25 +8,21 @@ from typing import Protocol
 
 
 class LLMProvider(Protocol):
-    def generate_json(self, system_prompt: str, user_prompt: str, api_key: str | None, model: str | None) -> dict:
+    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
         ...
 
 
-def get_provider(name: str) -> LLMProvider:
-    name = (name or "template").lower()
-    if name == "openai":
-        return OpenAIProvider()
-    if name == "anthropic":
-        return AnthropicProvider()
-    if name == "gemini":
-        return GeminiProvider()
-    return TemplateProvider()
+def get_generation_provider(*, use_template: bool = False) -> LLMProvider:
+    if use_template:
+        return TemplateProvider()
+    return GeminiProvider()
 
 
 class TemplateProvider:
-    def generate_json(self, system_prompt: str, user_prompt: str, api_key: str | None, model: str | None) -> dict:
+    """Deterministic offline generator used only for tests and local evals."""
+
+    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
         evidence = _extract_evidence(user_prompt)
-        question = _extract_between(user_prompt, "Question:", "\n\nEvidence:")
         if not evidence:
             return {
                 "answer": "I do not have enough product documentation to answer this confidently.",
@@ -46,53 +42,25 @@ class TemplateProvider:
         }
 
 
-class OpenAIProvider:
-    def generate_json(self, system_prompt: str, user_prompt: str, api_key: str | None, model: str | None) -> dict:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=model or "gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        return json.loads(response.choices[0].message.content or "{}")
-
-
-class AnthropicProvider:
-    def generate_json(self, system_prompt: str, user_prompt: str, api_key: str | None, model: str | None) -> dict:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
-        message = client.messages.create(
-            model=model or "claude-sonnet-4-20250514",
-            max_tokens=1200,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt + "\n\nReturn only valid JSON."}],
-        )
-        return json.loads(message.content[0].text)
-
-
 class GeminiProvider:
-    def generate_json(self, system_prompt: str, user_prompt: str, api_key: str | None, model: str | None) -> dict:
-        import google.generativeai as genai
+    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
+        from google import genai
+        from google.genai import types
 
-        genai.configure(api_key=api_key or os.getenv("GEMINI_API_KEY"))
-        gemini = genai.GenerativeModel(model or "gemini-1.5-flash", system_instruction=system_prompt)
-        response = gemini.generate_content(user_prompt + "\n\nReturn only valid JSON.")
-        return json.loads(response.text)
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is required for Gemini generation.")
 
-
-def _extract_between(text: str, start: str, end: str) -> str:
-    if start not in text:
-        return ""
-    value = text.split(start, 1)[1]
-    if end in value:
-        value = value.split(end, 1)[0]
-    return value.strip()
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model or "gemini-2.5-flash",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+            ),
+        )
+        return _parse_json_response(response.text or "{}")
 
 
 def _extract_evidence(prompt: str) -> list[dict]:
@@ -105,3 +73,16 @@ def _extract_evidence(prompt: str) -> list[dict]:
     except json.JSONDecodeError:
         return []
 
+
+def _parse_json_response(text: str) -> dict:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```json").removeprefix("```").strip()
+        cleaned = cleaned.removesuffix("```").strip()
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Gemini did not return valid JSON: {cleaned[:300]}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Gemini returned JSON, but not a JSON object.")
+    return payload

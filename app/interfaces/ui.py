@@ -17,7 +17,11 @@ from ..retrieval.factory import create_vector_store
 def _services(agent_override=None, ingestion_override=None, store_override=None):
     if agent_override and ingestion_override and store_override:
         return agent_override, ingestion_override, store_override
-    embedding_model = EmbeddingModel(settings.embedding_model)
+    embedding_model = EmbeddingModel(
+        settings.embedding_model,
+        provider=settings.embedding_provider,
+        mrl_dimensions=settings.embedding_dimensions,
+    )
     vector_store = create_vector_store(settings)
     ingestion_service = IngestionService(settings, embedding_model, vector_store)
     from ..generation.agent import SupportAgent
@@ -46,15 +50,13 @@ def ingest_file(file_obj, ingestion_service: IngestionService) -> str:
     return f"{record.status}: {record.title}: {record.chunks_indexed} chunks ({record.document_id}).{warning_suffix}"
 
 
-def ask(question: str, provider: str, api_key: str, top_k: int, draft_ticket_reply: bool, agent):
+def ask(question: str, top_k: int, draft_ticket_reply: bool, agent):
     response = agent.answer(
         ChatRequest(
             question=question,
-            provider=provider,
             top_k=int(top_k),
             draft_ticket_reply=draft_ticket_reply,
-        ),
-        api_key=api_key or None,
+        )
     )
     citations = "\n\n".join(
         f"[{idx}] {citation.title} / {citation.chunk_id} ({citation.score:.2f})\n{citation.snippet}"
@@ -78,10 +80,21 @@ def build_interface(agent_override=None, ingestion_override=None, store_override
             with gr.Row():
                 question = gr.Textbox(label="Customer Question", lines=4, scale=3)
                 with gr.Column(scale=1):
-                    provider = gr.Dropdown(["template", "openai", "anthropic", "gemini"], value="template", label="LLM Provider")
-                    api_key = gr.Textbox(label="BYO API Key", type="password")
-                    top_k = gr.Slider(1, 10, value=5, step=1, label="Retrieved Chunks")
-                    draft = gr.Checkbox(label="Draft ticket reply", value=True)
+                    gr.Markdown("**Generation:** Gemini, using the server-side `GEMINI_API_KEY` from `.env`.")
+                    with gr.Accordion("Advanced retrieval settings", open=False):
+                        top_k = gr.Slider(
+                            1,
+                            10,
+                            value=5,
+                            step=1,
+                            label="Evidence chunks",
+                            info="How many retrieved document chunks are passed to Gemini as evidence.",
+                        )
+                    draft = gr.Checkbox(
+                        label="Also draft customer reply",
+                        value=True,
+                        info="Adds a support-agent style reply that can be pasted into a ticket.",
+                    )
                     ask_btn = gr.Button("Answer", variant="primary")
             with gr.Row():
                 answer = gr.Textbox(label="Answer", lines=8)
@@ -92,8 +105,8 @@ def build_interface(agent_override=None, ingestion_override=None, store_override
                 escalation = gr.Textbox(label="Needs Escalation")
                 trace = gr.Textbox(label="Trace ID")
             ask_btn.click(
-                lambda q, p, k, t, d: ask(q, p, k, t, d, agent),
-                [question, provider, api_key, top_k, draft],
+                lambda q, k, d: ask(q, k, d, agent),
+                [question, top_k, draft],
                 [answer, citations, ticket, confidence, escalation, trace],
             )
 
