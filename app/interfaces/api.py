@@ -81,7 +81,9 @@ def _ensure_workspace_document(document_id: str, workspace_id: str):
 def startup() -> None:
     global startup_error
     try:
-        if not vector_store.has_records():
+        if not vector_store.has_records() or not ingestion_service.list_documents(
+            metadata_filter={"workspace_id": settings.default_workspace_id}
+        ):
             ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
         startup_error = None
     except Exception as exc:
