@@ -16,7 +16,7 @@ from app.ingestion.service import IngestionService
 from app.core.models import ChatRequest
 from app.core.safety import redact_secrets, strip_prompt_injection
 from app.core.workspace import apply_workspace_filter, metadata_matches_workspace, normalize_workspace_id
-from app.retrieval.vector_store import LocalVectorStore, VectorStore
+from app.retrieval.vector_store import LocalVectorStore, QdrantVectorStore, VectorStore
 from app.retrieval.vector_store import ChunkRecord, DocumentManifest, SearchResult, _reconstruct_documents
 from app.retrieval.factory import create_vector_store
 from app.evals.retrieval import run_retrieval_evals
@@ -349,6 +349,27 @@ def test_qdrant_style_store_can_reconstruct_documents_from_chunks():
 
     assert reconstructed[0].document_id == "doc-refund"
     assert reconstructed[0].title == "Billing"
+
+
+def test_qdrant_store_document_listing_falls_back_to_chunk_payloads():
+    record = ChunkRecord(
+        chunk_id="refund",
+        document_id="doc-refund",
+        version_id="v1",
+        title="Billing",
+        source_type="md",
+        source="billing.md",
+        text="Refund guidance.",
+        position=0,
+    )
+    store = object.__new__(QdrantVectorStore)
+    store.documents = {}
+    store.list_chunks = lambda: [record]
+
+    documents = store.list_documents()
+
+    assert documents[0].document_id == "doc-refund"
+    assert store.get_document("doc-refund").title == "Billing"
 
 
 def test_mrl_rerank_uses_largest_vector_field(tmp_path):
