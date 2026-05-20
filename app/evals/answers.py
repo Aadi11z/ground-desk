@@ -15,7 +15,7 @@ def run_answer_quality_evals(agent: SupportAgent) -> dict:
     escalation_hits = 0
 
     for case in GOLDEN_SET:
-        response = agent.answer(ChatRequest(question=case.question, provider="template"))
+        response = agent.answer(ChatRequest(question=case.question), force_template=True)
         answer_text = response.answer.lower()
         expected_term_hit = (
             all(term.lower() in answer_text for term in case.expected_terms)

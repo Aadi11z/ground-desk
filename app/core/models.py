@@ -26,8 +26,6 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1)
     conversation_id: str | None = None
     top_k: int = Field(default=5, ge=1, le=10)
-    provider: str = "template"
-    model: str | None = None
     draft_ticket_reply: bool = True
     filters: RetrievalFilters | None = None
 
@@ -78,8 +76,6 @@ class HealthResponse(BaseModel):
 
 class WorkflowRequest(BaseModel):
     question: str = Field(min_length=1)
-    provider: str = "template"
-    model: str | None = None
 
 
 class ConversationSummaryRequest(BaseModel):

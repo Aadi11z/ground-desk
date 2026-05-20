@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 def _env(name: str, default: str) -> str:
     return os.getenv(name, default)
@@ -13,7 +18,7 @@ class Settings:
     app_name: str = "GroundDesk"
     data_dir: Path = Path(os.getenv("DATA_DIR", "data"))
     sample_dir: Path = Path(_env("GROUNDDESK_SAMPLE_DIR", "sample_corpus"))
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
     embedding_provider: str = _env("GROUNDDESK_EMBEDDING_PROVIDER", "auto")
     embedding_dimensions: tuple[int, ...] = tuple(
         int(value.strip())
@@ -23,8 +28,8 @@ class Settings:
         ).split(",")
         if value.strip()
     )
-    default_provider: str = os.getenv("DEFAULT_PROVIDER", "template")
-    default_model: str = _env("GROUNDDESK_DEFAULT_MODEL", "")
+    generation_provider: str = _env("GROUNDDESK_GENERATION_PROVIDER", "gemini")
+    generation_model: str = _env("GROUNDDESK_GENERATION_MODEL", "gemini-2.5-flash")
     max_context_chunks: int = int(_env("GROUNDDESK_MAX_CONTEXT_CHUNKS", "5"))
     min_confidence: float = float(_env("GROUNDDESK_MIN_CONFIDENCE", "0.35"))
     retrieval_mode: str = _env("GROUNDDESK_RETRIEVAL_MODE", "adaptive")

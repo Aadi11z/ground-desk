@@ -29,7 +29,7 @@ def run_evals(agent: SupportAgent) -> dict:
     hits = 0
     escalations = 0
     for case in GOLDEN_SET:
-        response = agent.answer(ChatRequest(question=case.question, provider="template"))
+        response = agent.answer(ChatRequest(question=case.question), force_template=True)
         answer_text = response.answer.lower()
         term_hit = all(term.lower() in answer_text for term in case.expected_terms) if case.expected_terms else True
         escalation_hit = response.needs_escalation == case.should_escalate
@@ -51,4 +51,3 @@ def run_evals(agent: SupportAgent) -> dict:
         "escalation_accuracy": escalations / total,
         "results": results,
     }
-

@@ -32,12 +32,12 @@ The app automatically indexes the bundled documents in `sample_corpus/` when no 
 - Adaptive retrieval with query analysis, deterministic rewrites, multi-query expansion, HyDE-style expansion, and context compression.
 - Metadata filters plus final reranker hooks.
 - Pluggable vector-store backend with local development storage and optional Qdrant adapter.
-- Retrieval-Augmented Generation with citations.
+- Gemini-backed Retrieval-Augmented Generation with citations.
 - Higher-level support workflows: escalation notes, summaries, FAQ generation, knowledge-gap detection, and support-article suggestions.
 - Synthetic eval-data generation plus retrieval/answer-quality metrics.
 - Local chat-history, feedback, analytics, and object-storage scaffolding.
-- OpenAI, Anthropic, Gemini, and local template generation providers.
-- BYO API-key support through the UI or `X-LLM-API-Key` header.
+- Gemini-only generation using the server-side `GEMINI_API_KEY`.
+- Deterministic template generation for offline tests and eval scaffolding.
 - Deterministic hashing embeddings for offline tests and demos.
 - Optional public pretrained embeddings with `BAAI/bge-small-en-v1.5`.
 - FastAPI backend with OpenAPI docs.
@@ -80,7 +80,6 @@ curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "question": "How long do password reset emails take?",
-    "provider": "template",
     "top_k": 5,
     "draft_ticket_reply": true
   }'
