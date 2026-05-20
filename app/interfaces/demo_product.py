@@ -279,7 +279,6 @@ def demo_product_html() -> str:
         <p class="help">Optional for the demo. Upload Markdown, TXT, or PDF to index it into Qdrant for the demo workspace.</p>
         <div class="upload">
           <input type="file" id="file" accept=".pdf,.md,.markdown,.txt">
-          <input type="password" id="adminKey" placeholder="Admin key, if configured">
           <button class="secondary-btn" id="uploadBtn">Index document</button>
           <div class="help" id="uploadStatus"></div>
         </div>
@@ -448,8 +447,6 @@ def demo_product_html() -> str:
       const body = new FormData();
       body.append("file", file);
       const extra = {"X-Workspace-ID": workspaceId};
-      const key = el("adminKey").value.trim();
-      if (key) extra["X-Admin-API-Key"] = key;
       el("uploadBtn").disabled = true;
       el("uploadStatus").textContent = "Indexing document into Qdrant…";
       try {
