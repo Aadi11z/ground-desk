@@ -80,7 +80,6 @@ def build_interface(agent_override=None, ingestion_override=None, store_override
             with gr.Row():
                 question = gr.Textbox(label="Customer Question", lines=4, scale=3)
                 with gr.Column(scale=1):
-                    gr.Markdown("**Generation:** Gemini, using the server-side `GEMINI_API_KEY` from `.env`.")
                     with gr.Accordion("Advanced retrieval settings", open=False):
                         top_k = gr.Slider(
                             1,
