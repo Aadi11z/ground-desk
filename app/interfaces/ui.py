@@ -74,7 +74,11 @@ def build_interface(agent_override=None, ingestion_override=None, store_override
     agent, ingestion_service, vector_store = _services(agent_override, ingestion_override, store_override)
     with gr.Blocks(title="GroundDesk") as demo:
         gr.Markdown("# GroundDesk\nEvidence-grounded customer support agent with RAG, citations, evals, and deployment-ready APIs.")
-        status = gr.Textbox(label="System Status", value=ensure_sample_data(ingestion_service, vector_store), interactive=False)
+        status = gr.Textbox(
+            label="System Status",
+            value="Admin UI loaded. Use /api/health for current indexing status.",
+            interactive=False,
+        )
 
         with gr.Tab("Chat"):
             with gr.Row():

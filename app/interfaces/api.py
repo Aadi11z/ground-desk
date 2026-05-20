@@ -49,6 +49,7 @@ feedback_repo = JsonlRepository(settings.feedback_path)
 chat_history_repo = JsonlRepository(settings.chat_history_path)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
+startup_error: str | None = None
 
 
 def _require_admin(x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key")) -> None:
@@ -78,18 +79,32 @@ def _ensure_workspace_document(document_id: str, workspace_id: str):
 
 @app.on_event("startup")
 def startup() -> None:
-    if not vector_store.has_records():
-        ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
+    global startup_error
+    try:
+        if not vector_store.has_records():
+            ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
+        startup_error = None
+    except Exception as exc:
+        startup_error = str(exc)
 
 
 @app.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    documents = 0
+    chunks = 0
+    health_error = startup_error
+    try:
+        documents = len(ingestion_service.list_documents())
+        chunks = vector_store.count_chunks()
+    except Exception as exc:
+        health_error = health_error or str(exc)
     return HealthResponse(
         app=settings.app_name,
-        status="ok",
-        documents=len(ingestion_service.list_documents()),
-        chunks=vector_store.count_chunks(),
+        status="degraded" if health_error else "ok",
+        documents=documents,
+        chunks=chunks,
         embedding_model=f"{settings.embedding_model} ({embedding_model.backend})",
+        startup_error=health_error,
     )
 
 

@@ -73,6 +73,7 @@ class HealthResponse(BaseModel):
     documents: int
     chunks: int
     embedding_model: str
+    startup_error: str | None = None
 
 
 class WorkflowRequest(BaseModel):
