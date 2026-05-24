@@ -98,7 +98,7 @@ curl -X POST http://localhost:8000/api/chat \
   }'
 ```
 
-Admin endpoints use `X-Admin-API-Key` when `GROUNDDESK_ADMIN_API_KEY` is set.
+Admin endpoints use `X-Admin-API-Key` when `ADMIN_API_KEY` is set.
 
 ## Project Layout
 
