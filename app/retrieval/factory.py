@@ -15,4 +15,6 @@ def create_vector_store(settings: Settings) -> VectorStoreBackend:
             api_key=settings.qdrant_api_key,
             collection_name=settings.qdrant_collection,
         )
-    raise ValueError(f"Unsupported vector-store backend: {settings.vector_store_backend}")
+    raise ValueError(
+        f"Unsupported vector-store backend: {settings.vector_store_backend}"
+    )

@@ -20,9 +20,13 @@ class TextChunk:
     content_hash: str = ""
 
 
-def chunk_text(text: str, document_id: str, max_words: int = 180, overlap_words: int = 35) -> list[TextChunk]:
+def chunk_text(
+    text: str, document_id: str, max_words: int = 180, overlap_words: int = 35
+) -> list[TextChunk]:
     section = LoadedSection(title=None, text=text, position=0)
-    return chunk_sections((section,), document_id, max_words=max_words, overlap_words=overlap_words)
+    return chunk_sections(
+        (section,), document_id, max_words=max_words, overlap_words=overlap_words
+    )
 
 
 def chunk_sections(
@@ -75,7 +79,9 @@ def _chunk_section(
                 section_path=section.heading_path,
                 page_number=section.page_number,
                 word_count=len(chunk_words),
-                content_hash=hashlib.sha256(chunk_text_value.encode("utf-8")).hexdigest(),
+                content_hash=hashlib.sha256(
+                    chunk_text_value.encode("utf-8")
+                ).hexdigest(),
             )
         )
         if end == len(words):

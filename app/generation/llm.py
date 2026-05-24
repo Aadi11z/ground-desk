@@ -8,8 +8,9 @@ from typing import Protocol
 
 
 class LLMProvider(Protocol):
-    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
-        ...
+    def generate_json(
+        self, system_prompt: str, user_prompt: str, model: str | None
+    ) -> dict: ...
 
 
 def get_generation_provider(*, use_template: bool = False) -> LLMProvider:
@@ -21,7 +22,9 @@ def get_generation_provider(*, use_template: bool = False) -> LLMProvider:
 class TemplateProvider:
     """Deterministic offline generator used only for tests and local evals."""
 
-    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
+    def generate_json(
+        self, system_prompt: str, user_prompt: str, model: str | None
+    ) -> dict:
         evidence = _extract_evidence(user_prompt)
         if not evidence:
             return {
@@ -43,7 +46,9 @@ class TemplateProvider:
 
 
 class GeminiProvider:
-    def generate_json(self, system_prompt: str, user_prompt: str, model: str | None) -> dict:
+    def generate_json(
+        self, system_prompt: str, user_prompt: str, model: str | None
+    ) -> dict:
         from google import genai
         from google.genai import types
 

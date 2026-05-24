@@ -14,6 +14,7 @@ from ..core.models import ChatRequest
 from ..retrieval.vector_store import VectorStoreBackend
 from ..retrieval.factory import create_vector_store
 
+
 def _services(agent_override=None, ingestion_override=None, store_override=None):
     if agent_override and ingestion_override and store_override:
         return agent_override, ingestion_override, store_override
@@ -30,9 +31,13 @@ def _services(agent_override=None, ingestion_override=None, store_override=None)
     return agent, ingestion_service, vector_store
 
 
-def ensure_sample_data(ingestion_service: IngestionService, vector_store: VectorStoreBackend) -> str:
+def ensure_sample_data(
+    ingestion_service: IngestionService, vector_store: VectorStoreBackend
+) -> str:
     if not vector_store.has_records():
-        records = ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
+        records = ingestion_service.ingest_sample_corpus(
+            metadata={"workspace_id": settings.default_workspace_id}
+        )
         return f"Loaded {len(records)} sample documents."
     return f"Ready with {len(ingestion_service.list_documents())} documents and {vector_store.count_chunks()} chunks."
 
@@ -46,7 +51,9 @@ def ingest_file(file_obj, ingestion_service: IngestionService) -> str:
         path,
         original_filename=original_filename,
     )
-    warning_suffix = f" Warnings: {', '.join(record.warnings)}." if record.warnings else ""
+    warning_suffix = (
+        f" Warnings: {', '.join(record.warnings)}." if record.warnings else ""
+    )
     return f"{record.status}: {record.title}: {record.chunks_indexed} chunks ({record.document_id}).{warning_suffix}"
 
 
@@ -62,7 +69,14 @@ def ask(question: str, top_k: int, draft_ticket_reply: bool, agent):
         f"[{idx}] {citation.title} / {citation.chunk_id} ({citation.score:.2f})\n{citation.snippet}"
         for idx, citation in enumerate(response.citations, start=1)
     )
-    return response.answer, citations, response.suggested_ticket_reply or "", f"{response.confidence:.2f}", str(response.needs_escalation), response.trace_id
+    return (
+        response.answer,
+        citations,
+        response.suggested_ticket_reply or "",
+        f"{response.confidence:.2f}",
+        str(response.needs_escalation),
+        response.trace_id,
+    )
 
 
 def run_eval_ui(agent):
@@ -70,10 +84,16 @@ def run_eval_ui(agent):
     return result
 
 
-def build_interface(agent_override=None, ingestion_override=None, store_override=None) -> gr.Blocks:
-    agent, ingestion_service, vector_store = _services(agent_override, ingestion_override, store_override)
+def build_interface(
+    agent_override=None, ingestion_override=None, store_override=None
+) -> gr.Blocks:
+    agent, ingestion_service, vector_store = _services(
+        agent_override, ingestion_override, store_override
+    )
     with gr.Blocks(title="GroundDesk") as demo:
-        gr.Markdown("# GroundDesk\nEvidence-grounded customer support agent with RAG, citations, evals, and deployment-ready APIs.")
+        gr.Markdown(
+            "# GroundDesk\nEvidence-grounded customer support agent with RAG, citations, evals, and deployment-ready APIs."
+        )
         status = gr.Textbox(
             label="System Status",
             value="Admin UI loaded. Use /api/health for current indexing status.",
@@ -117,7 +137,11 @@ def build_interface(agent_override=None, ingestion_override=None, store_override
             upload = gr.File(label="Upload PDF, Markdown, or TXT")
             ingest_btn = gr.Button("Index Document")
             ingest_status = gr.Textbox(label="Ingestion Result")
-            ingest_btn.click(lambda file_obj: ingest_file(file_obj, ingestion_service), upload, ingest_status)
+            ingest_btn.click(
+                lambda file_obj: ingest_file(file_obj, ingestion_service),
+                upload,
+                ingest_status,
+            )
 
         with gr.Tab("Evals"):
             eval_btn = gr.Button("Run Golden Evals")

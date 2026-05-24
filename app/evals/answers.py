@@ -15,17 +15,22 @@ def run_answer_quality_evals(agent: SupportAgent) -> dict:
     escalation_hits = 0
 
     for case in GOLDEN_SET:
-        response = agent.answer(ChatRequest(question=case.question), force_template=True)
+        response = agent.answer(
+            ChatRequest(question=case.question), force_template=True
+        )
         answer_text = response.answer.lower()
         expected_term_hit = (
             all(term.lower() in answer_text for term in case.expected_terms)
             if case.expected_terms
             else response.needs_escalation
         )
-        citations_present_when_needed = bool(response.citations) if case.expected_terms else not response.citations
+        citations_present_when_needed = (
+            bool(response.citations) if case.expected_terms else not response.citations
+        )
         faithful_hit = expected_term_hit and citations_present_when_needed
         precision_hit = not response.citations or any(
-            citation.title.lower() in answer_text or citation.snippet.lower()[:20] in answer_text
+            citation.title.lower() in answer_text
+            or citation.snippet.lower()[:20] in answer_text
             for citation in response.citations
         )
         recall_hit = bool(response.citations) if case.expected_terms else True

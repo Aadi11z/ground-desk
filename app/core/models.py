@@ -93,5 +93,3 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     accepted: bool
     trace_id: str
-
- 

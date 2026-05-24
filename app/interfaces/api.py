@@ -13,7 +13,11 @@ from ..generation.agent import SupportAgent
 from ..generation.workflows import SupportWorkflowService
 from ..core.config import settings
 from ..core.persistence import JsonlRepository
-from ..core.workspace import apply_workspace_filter, metadata_matches_workspace, normalize_workspace_id
+from ..core.workspace import (
+    apply_workspace_filter,
+    metadata_matches_workspace,
+    normalize_workspace_id,
+)
 from ..retrieval.embeddings import EmbeddingModel
 from ..evals.answers import run_answer_quality_evals
 from ..evals.golden_set import run_evals
@@ -52,7 +56,9 @@ app = FastAPI(title=settings.app_name, version="0.1.0")
 startup_error: str | None = None
 
 
-def _require_admin(x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key")) -> None:
+def _require_admin(
+    x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
+) -> None:
     if not settings.admin_api_key:
         return
     if x_admin_api_key != settings.admin_api_key:
@@ -73,7 +79,9 @@ def _ensure_workspace_document(document_id: str, workspace_id: str):
         workspace_id,
         default=settings.default_workspace_id,
     ):
-        raise HTTPException(status_code=404, detail=f"Unknown document_id: {document_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Unknown document_id: {document_id}"
+        )
     return document
 
 
@@ -84,7 +92,9 @@ def startup() -> None:
         if not vector_store.has_records() or not ingestion_service.list_documents(
             metadata_filter={"workspace_id": settings.default_workspace_id}
         ):
-            ingestion_service.ingest_sample_corpus(metadata={"workspace_id": settings.default_workspace_id})
+            ingestion_service.ingest_sample_corpus(
+                metadata={"workspace_id": settings.default_workspace_id}
+            )
         startup_error = None
     except Exception as exc:
         startup_error = str(exc)
@@ -111,9 +121,13 @@ def health() -> HealthResponse:
 
 
 @app.get("/api/documents")
-def list_documents(x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID")):
+def list_documents(
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+):
     workspace_id = _workspace_id(x_workspace_id)
-    return ingestion_service.list_documents(metadata_filter={"workspace_id": workspace_id})
+    return ingestion_service.list_documents(
+        metadata_filter={"workspace_id": workspace_id}
+    )
 
 
 @app.post("/api/documents", response_model=DocumentIngestResponse)
@@ -189,7 +203,9 @@ def ingest_url(
 ) -> DocumentIngestResponse:
     workspace_id = _workspace_id(x_workspace_id)
     try:
-        record = ingestion_service.ingest_url(request.url, metadata={"workspace_id": workspace_id})
+        record = ingestion_service.ingest_url(
+            request.url, metadata={"workspace_id": workspace_id}
+        )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DocumentIngestResponse(
@@ -213,7 +229,10 @@ def delete_document(
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest, x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID")):
+def chat(
+    request: ChatRequest,
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+):
     workspace_id = _workspace_id(x_workspace_id)
     scoped_request = apply_workspace_filter(request, workspace_id)
     try:
@@ -264,7 +283,9 @@ def escalation_note(request: WorkflowRequest, _: None = Depends(_require_admin))
 
 
 @app.post("/api/workflows/conversation-summary")
-def conversation_summary(request: ConversationSummaryRequest, _: None = Depends(_require_admin)):
+def conversation_summary(
+    request: ConversationSummaryRequest, _: None = Depends(_require_admin)
+):
     return workflows.summarize_conversation(request.messages)
 
 
@@ -328,7 +349,11 @@ def history(
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
     workspace_id = _workspace_id(x_workspace_id)
-    return [item for item in chat_history_repo.read_all() if item.get("workspace_id", settings.default_workspace_id) == workspace_id]
+    return [
+        item
+        for item in chat_history_repo.read_all()
+        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
+    ]
 
 
 @app.get("/api/analytics")
@@ -337,8 +362,16 @@ def analytics(
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
     workspace_id = _workspace_id(x_workspace_id)
-    history_items = [item for item in chat_history_repo.read_all() if item.get("workspace_id", settings.default_workspace_id) == workspace_id]
-    feedback_items = [item for item in feedback_repo.read_all() if item.get("workspace_id", settings.default_workspace_id) == workspace_id]
+    history_items = [
+        item
+        for item in chat_history_repo.read_all()
+        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
+    ]
+    feedback_items = [
+        item
+        for item in feedback_repo.read_all()
+        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
+    ]
     return {
         "messages": len(history_items),
         "feedback_count": len(feedback_items),
@@ -348,7 +381,8 @@ def analytics(
             else None
         ),
         "unresolved_query_rate": (
-            sum(bool(item["needs_escalation"]) for item in history_items) / len(history_items)
+            sum(bool(item["needs_escalation"]) for item in history_items)
+            / len(history_items)
             if history_items
             else 0.0
         ),
@@ -373,4 +407,6 @@ def app_demo() -> HTMLResponse:
     return HTMLResponse(demo_product_html())
 
 
-app = gr.mount_gradio_app(app, build_interface(agent, ingestion_service, vector_store), path="/demo")
+app = gr.mount_gradio_app(
+    app, build_interface(agent, ingestion_service, vector_store), path="/demo"
+)

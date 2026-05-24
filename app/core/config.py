@@ -41,14 +41,19 @@ class Settings:
     reciprocal_rank_k: int = int(_env("GROUNDDESK_RRF_K", "60"))
     dense_rrf_weight: float = float(_env("GROUNDDESK_DENSE_RRF_WEIGHT", "1.0"))
     sparse_rrf_weight: float = float(_env("GROUNDDESK_SPARSE_RRF_WEIGHT", "1.0"))
-    adaptive_retrieval_enabled: bool = _env(
-        "GROUNDDESK_ADAPTIVE_RETRIEVAL",
-        "true",
-    ).lower() == "true"
+    adaptive_retrieval_enabled: bool = (
+        _env(
+            "GROUNDDESK_ADAPTIVE_RETRIEVAL",
+            "true",
+        ).lower()
+        == "true"
+    )
     multi_query_limit: int = int(_env("GROUNDDESK_MULTI_QUERY_LIMIT", "3"))
     context_max_sentences: int = int(_env("GROUNDDESK_CONTEXT_MAX_SENTENCES", "3"))
     final_reranker: str = _env("GROUNDDESK_FINAL_RERANKER", "lexical")
-    cross_encoder_model: str = _env("GROUNDDESK_CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    cross_encoder_model: str = _env(
+        "GROUNDDESK_CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    )
     vector_store_backend: str = _env("GROUNDDESK_VECTOR_STORE", "local")
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_api_key: str | None = os.getenv("QDRANT_API_KEY")

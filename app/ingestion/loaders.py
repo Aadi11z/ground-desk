@@ -96,7 +96,9 @@ def _load_text(
     original_filename: str | None,
 ) -> LoadedDocument:
     text = _normalize_document_text(path.read_text(encoding="utf-8", errors="ignore"))
-    sections = _markdown_sections(text) if path.suffix.lower() in {".md", ".markdown"} else ()
+    sections = (
+        _markdown_sections(text) if path.suffix.lower() in {".md", ".markdown"} else ()
+    )
     if not sections:
         sections = (LoadedSection(title=None, text=text, position=0),)
     return LoadedDocument(
@@ -124,7 +126,9 @@ def _load_pdf(
         raise RuntimeError("Install pypdf to ingest PDF files.") from exc
 
     reader = PdfReader(str(path))
-    page_text = [_normalize_document_text(page.extract_text() or "") for page in reader.pages]
+    page_text = [
+        _normalize_document_text(page.extract_text() or "") for page in reader.pages
+    ]
     sections = tuple(
         LoadedSection(
             title=f"Page {page_number}",

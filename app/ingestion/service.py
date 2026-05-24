@@ -16,7 +16,9 @@ from ..retrieval.vector_store import ChunkRecord, DocumentManifest, VectorStoreB
 
 
 class IngestionService:
-    def __init__(self, settings: Settings, embeddings: EmbeddingModel, store: VectorStoreBackend):
+    def __init__(
+        self, settings: Settings, embeddings: EmbeddingModel, store: VectorStoreBackend
+    ):
         self.settings = settings
         self.embeddings = embeddings
         self.store = store
@@ -46,7 +48,9 @@ class IngestionService:
         self.object_store.put(path, key=f"{record.document_id}{path.suffix.lower()}")
         return record
 
-    def ingest_url(self, url: str, *, metadata: dict[str, str] | None = None) -> DocumentRecord:
+    def ingest_url(
+        self, url: str, *, metadata: dict[str, str] | None = None
+    ) -> DocumentRecord:
         return self.ingest_loaded(_with_metadata(load_url(url), metadata))
 
     def create_uploaded_document(
@@ -79,7 +83,9 @@ class IngestionService:
         if existing is None:
             raise KeyError(f"Unknown document_id: {document_id}")
         if not existing.source_id.startswith("document:"):
-            raise ValueError("Only uploaded documents can be replaced through this endpoint.")
+            raise ValueError(
+                "Only uploaded documents can be replaced through this endpoint."
+            )
         replacement_metadata = dict(existing.metadata)
         replacement_metadata.update(metadata or {})
         return self.ingest_path(
@@ -92,13 +98,19 @@ class IngestionService:
             metadata=replacement_metadata,
         )
 
-    def ingest_loaded(self, loaded: LoadedDocument, *, document_id: str | None = None) -> DocumentRecord:
+    def ingest_loaded(
+        self, loaded: LoadedDocument, *, document_id: str | None = None
+    ) -> DocumentRecord:
         source_id = loaded.source_id or f"memory:{loaded.source}"
         content_hash = _sha256(loaded.text)
         document_id = document_id or _document_id(source_id)
         version_id = _version_id(content_hash)
-        sections = loaded.sections or (LoadedSection(title=None, text=loaded.text, position=0),)
-        usable_sections, quality_warnings, empty_sections = assess_sections(loaded, sections)
+        sections = loaded.sections or (
+            LoadedSection(title=None, text=loaded.text, position=0),
+        )
+        usable_sections, quality_warnings, empty_sections = assess_sections(
+            loaded, sections
+        )
         candidate_chunks = chunk_sections(usable_sections, document_id=document_id)
         chunks, chunk_warnings = filter_chunks(candidate_chunks)
         quality_report = build_report(
@@ -148,7 +160,9 @@ class IngestionService:
             original_filename=loaded.original_filename,
             chunks_indexed=len(records),
             ingested_at=datetime.now(timezone.utc).isoformat(),
-            status="rejected" if quality_report.rejected else ("indexed_with_warnings" if quality_report.warnings else "indexed"),
+            status="rejected"
+            if quality_report.rejected
+            else ("indexed_with_warnings" if quality_report.warnings else "indexed"),
             warnings=quality_report.warnings,
             diagnostics={
                 "total_sections": quality_report.total_sections,
@@ -163,7 +177,9 @@ class IngestionService:
         self.store.upsert_document(manifest, records, vector_batch.vectors)
         return _document_record(manifest)
 
-    def ingest_sample_corpus(self, *, metadata: dict[str, str] | None = None) -> list[DocumentRecord]:
+    def ingest_sample_corpus(
+        self, *, metadata: dict[str, str] | None = None
+    ) -> list[DocumentRecord]:
         if not self.settings.sample_dir.exists():
             return []
         records = []
@@ -172,13 +188,19 @@ class IngestionService:
                 records.append(self.ingest_path(path, metadata=metadata))
         return records
 
-    def list_documents(self, *, metadata_filter: dict[str, str] | None = None) -> list[DocumentRecord]:
+    def list_documents(
+        self, *, metadata_filter: dict[str, str] | None = None
+    ) -> list[DocumentRecord]:
         documents = self.store.list_documents()
         if metadata_filter:
             documents = [
                 document
                 for document in documents
-                if _metadata_matches_filter(document.metadata, metadata_filter, default_workspace_id=self.settings.default_workspace_id)
+                if _metadata_matches_filter(
+                    document.metadata,
+                    metadata_filter,
+                    default_workspace_id=self.settings.default_workspace_id,
+                )
             ]
         return [
             _document_record(document)
@@ -205,7 +227,9 @@ def _document_record(manifest: DocumentManifest) -> DocumentRecord:
     )
 
 
-def _with_metadata(loaded: LoadedDocument, metadata: dict[str, str] | None) -> LoadedDocument:
+def _with_metadata(
+    loaded: LoadedDocument, metadata: dict[str, str] | None
+) -> LoadedDocument:
     if not metadata:
         return loaded
     merged = dict(loaded.metadata)
@@ -222,7 +246,9 @@ def _with_metadata(loaded: LoadedDocument, metadata: dict[str, str] | None) -> L
     )
 
 
-def _metadata_matches_filter(metadata: dict[str, str], filters: dict[str, str], *, default_workspace_id: str) -> bool:
+def _metadata_matches_filter(
+    metadata: dict[str, str], filters: dict[str, str], *, default_workspace_id: str
+) -> bool:
     for key, expected in filters.items():
         actual = metadata.get(key)
         if key == "workspace_id":

@@ -56,7 +56,13 @@ class AdaptiveQueryPlanner:
         )
         multimodal = any(
             phrase in lowered
-            for phrase in ("screenshot", "image", "diagram", "video", "where is the button")
+            for phrase in (
+                "screenshot",
+                "image",
+                "diagram",
+                "video",
+                "where is the button",
+            )
         )
         ambiguous = len(tokens) <= 4 or lowered in {"help", "login broken", "it failed"}
         out_of_scope = any(
@@ -112,7 +118,9 @@ class AdaptiveQueryPlanner:
             rewritten = f"{rewritten} troubleshooting resolution"
         return rewritten
 
-    def expand_queries(self, rewritten_query: str, analysis: QueryAnalysis) -> tuple[str, ...]:
+    def expand_queries(
+        self, rewritten_query: str, analysis: QueryAnalysis
+    ) -> tuple[str, ...]:
         candidates = [rewritten_query]
         lowered = rewritten_query.lower()
         if analysis.troubleshooting:
@@ -123,7 +131,11 @@ class AdaptiveQueryPlanner:
             candidates.append("annual plan refund billing policy")
         if "export" in lowered:
             candidates.append("CSV export reports page")
-        deduped = tuple(dict.fromkeys(candidate.strip() for candidate in candidates if candidate.strip()))
+        deduped = tuple(
+            dict.fromkeys(
+                candidate.strip() for candidate in candidates if candidate.strip()
+            )
+        )
         return deduped[: self.multi_query_limit]
 
     def hyde_query(self, rewritten_query: str) -> str:

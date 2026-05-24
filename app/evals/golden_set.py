@@ -16,11 +16,18 @@ class EvalCase:
 
 
 GOLDEN_SET = [
-    EvalCase("How long does password reset email delivery usually take?", ("password", "email")),
+    EvalCase(
+        "How long does password reset email delivery usually take?",
+        ("password", "email"),
+    ),
     EvalCase("Can I export invoices from the billing page?", ("invoice", "billing")),
     EvalCase("What should I do if SSO users cannot sign in?", ("sso", "identity")),
     EvalCase("Do you support refunds for annual plans?", ("refund", "annual")),
-    EvalCase("Can GroundDesk configure my unrelated payroll software?", tuple(), should_escalate=True),
+    EvalCase(
+        "Can GroundDesk configure my unrelated payroll software?",
+        tuple(),
+        should_escalate=True,
+    ),
 ]
 
 
@@ -29,9 +36,15 @@ def run_evals(agent: SupportAgent) -> dict:
     hits = 0
     escalations = 0
     for case in GOLDEN_SET:
-        response = agent.answer(ChatRequest(question=case.question), force_template=True)
+        response = agent.answer(
+            ChatRequest(question=case.question), force_template=True
+        )
         answer_text = response.answer.lower()
-        term_hit = all(term.lower() in answer_text for term in case.expected_terms) if case.expected_terms else True
+        term_hit = (
+            all(term.lower() in answer_text for term in case.expected_terms)
+            if case.expected_terms
+            else True
+        )
         escalation_hit = response.needs_escalation == case.should_escalate
         hits += int(term_hit)
         escalations += int(escalation_hit)

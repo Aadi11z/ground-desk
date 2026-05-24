@@ -13,7 +13,9 @@ def main() -> None:
     if not local_store.has_records():
         raise SystemExit("Local vector store is empty; nothing to migrate.")
     if not local_store.index_metadata:
-        raise SystemExit("Local vector store has no embedding metadata; reindex locally before migration.")
+        raise SystemExit(
+            "Local vector store has no embedding metadata; reindex locally before migration."
+        )
 
     qdrant_store = QdrantVectorStore(
         settings.index_dir,

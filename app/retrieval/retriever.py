@@ -41,7 +41,9 @@ class HybridRetriever:
         self.store = store
         self.embeddings = embeddings
         self.lexical_index = BM25Index()
-        self.planner = AdaptiveQueryPlanner(multi_query_limit=settings.multi_query_limit)
+        self.planner = AdaptiveQueryPlanner(
+            multi_query_limit=settings.multi_query_limit
+        )
         self.final_reranker = create_final_reranker(
             settings.final_reranker,
             cross_encoder_model=settings.cross_encoder_model,
@@ -70,7 +72,8 @@ class HybridRetriever:
         )
         plan = (
             self.planner.plan(query)
-            if self.settings.adaptive_retrieval_enabled and self.settings.retrieval_mode.lower() == "adaptive"
+            if self.settings.adaptive_retrieval_enabled
+            and self.settings.retrieval_mode.lower() == "adaptive"
             else self._static_plan(query)
         )
         mode = self._mode(plan.mode)
@@ -92,7 +95,9 @@ class HybridRetriever:
         dense_results = []
         sparse_results = []
         for search_query in plan.search_queries:
-            search_embeddings = self._embeddings_for(search_query, fallback=query_embeddings)
+            search_embeddings = self._embeddings_for(
+                search_query, fallback=query_embeddings
+            )
             dense_results.extend(
                 self._search_dense(
                     _query_vector(search_embeddings, coarse_vector_name),
@@ -143,9 +148,13 @@ class HybridRetriever:
                 query_embeddings,
                 top_k=max(top_k, self.settings.dense_candidate_k),
             )
-            return self._compress(query, self._final_rerank(query, reranked, top_k=top_k))
+            return self._compress(
+                query, self._final_rerank(query, reranked, top_k=top_k)
+            )
         if mode == "sparse":
-            return self._compress(query, self._final_rerank(query, sparse_results, top_k=top_k))
+            return self._compress(
+                query, self._final_rerank(query, sparse_results, top_k=top_k)
+            )
         fused = _reciprocal_rank_fusion(
             dense_results,
             sparse_results,
@@ -169,9 +178,15 @@ class HybridRetriever:
         document_ids: set[str] | None = None,
     ) -> list[SearchResult]:
         self._refresh_lexical_index_if_needed()
-        results = self.lexical_index.search(query, top_k=max(top_k, self.settings.sparse_candidate_k))
+        results = self.lexical_index.search(
+            query, top_k=max(top_k, self.settings.sparse_candidate_k)
+        )
         if document_ids is not None:
-            results = [result for result in results if result.record.document_id in document_ids]
+            results = [
+                result
+                for result in results
+                if result.record.document_id in document_ids
+            ]
         return results[:top_k]
 
     def _refresh_lexical_index_if_needed(self) -> None:
@@ -197,7 +212,10 @@ class HybridRetriever:
                 )
         records = self.store.list_chunks()
         return tuple(
-            sorted((record.chunk_id, record.content_hash or record.text) for record in records)
+            sorted(
+                (record.chunk_id, record.content_hash or record.text)
+                for record in records
+            )
         )
 
     def _mode(self, override: str | None = None) -> RetrievalMode:
@@ -214,7 +232,9 @@ class HybridRetriever:
     def _static_plan(self, query: str) -> RetrievalPlan:
         analysis = self.planner.analyze(query)
         return RetrievalPlan(
-            mode="hybrid" if self.settings.retrieval_mode.lower() == "adaptive" else self.settings.retrieval_mode,
+            mode="hybrid"
+            if self.settings.retrieval_mode.lower() == "adaptive"
+            else self.settings.retrieval_mode,
             rewritten_query=query,
             search_queries=(query,),
             use_hyde=False,
@@ -238,7 +258,9 @@ class HybridRetriever:
             return candidates[:top_k]
 
         candidate_ids = [candidate.record.chunk_id for candidate in candidates]
-        document_vectors = self.store.fetch_vectors(candidate_ids, vector_name=largest_vector_name)
+        document_vectors = self.store.fetch_vectors(
+            candidate_ids, vector_name=largest_vector_name
+        )
         if not document_vectors:
             return candidates[:top_k]
 
@@ -357,7 +379,9 @@ def _smallest_vector_name(vectors: dict[str, np.ndarray]) -> str:
     return min(vectors, key=lambda name: vectors[name].shape[1])
 
 
-def _select_query_vector_name(vectors: dict[str, np.ndarray], *, preferred: str | None) -> str:
+def _select_query_vector_name(
+    vectors: dict[str, np.ndarray], *, preferred: str | None
+) -> str:
     if preferred in vectors:
         return str(preferred)
     return _smallest_vector_name(vectors)
@@ -382,10 +406,18 @@ def _coerce_query_embeddings(
     if isinstance(query_embeddings, dict):
         return query_embeddings
     if isinstance(query_embeddings, np.ndarray):
-        matrix = query_embeddings.reshape(1, -1) if query_embeddings.ndim == 1 else query_embeddings
+        matrix = (
+            query_embeddings.reshape(1, -1)
+            if query_embeddings.ndim == 1
+            else query_embeddings
+        )
         return {f"dense_{matrix.shape[1]}": matrix}
     if query_embedding is not None:
-        matrix = query_embedding.reshape(1, -1) if query_embedding.ndim == 1 else query_embedding
+        matrix = (
+            query_embedding.reshape(1, -1)
+            if query_embedding.ndim == 1
+            else query_embedding
+        )
         return {f"dense_{matrix.shape[1]}": matrix}
     raise ValueError("At least one query embedding representation is required.")
 

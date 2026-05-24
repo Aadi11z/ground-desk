@@ -11,7 +11,9 @@ class SupportWorkflowService:
         self.agent = agent
 
     def escalation_note(self, question: str) -> dict:
-        response = self.agent.answer(ChatRequest(question=question), force_template=True)
+        response = self.agent.answer(
+            ChatRequest(question=question), force_template=True
+        )
         note = (
             f"Escalation needed for query: {question}\n"
             f"Current answer confidence: {response.confidence}\n"
@@ -32,7 +34,11 @@ class SupportWorkflowService:
         }
 
     def faq_from_document(self, title: str, text: str) -> dict:
-        sentences = [sentence.strip() for sentence in text.replace("\n", " ").split(".") if sentence.strip()]
+        sentences = [
+            sentence.strip()
+            for sentence in text.replace("\n", " ").split(".")
+            if sentence.strip()
+        ]
         faqs = []
         for sentence in sentences[:5]:
             faqs.append(
@@ -44,21 +50,29 @@ class SupportWorkflowService:
         return {"title": title, "faqs": faqs}
 
     def summarize_document(self, title: str, text: str) -> dict:
-        sentences = [sentence.strip() for sentence in text.replace("\n", " ").split(".") if sentence.strip()]
+        sentences = [
+            sentence.strip()
+            for sentence in text.replace("\n", " ").split(".")
+            if sentence.strip()
+        ]
         return {
             "title": title,
             "summary": ". ".join(sentences[:3]) + ("." if sentences else ""),
         }
 
     def summarize_changelog(self, title: str, text: str) -> dict:
-        bullets = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+        bullets = [
+            line.strip("- ").strip() for line in text.splitlines() if line.strip()
+        ]
         return {
             "title": title,
             "highlights": bullets[:5],
         }
 
     def knowledge_gap(self, question: str) -> dict:
-        response = self.agent.answer(ChatRequest(question=question), force_template=True)
+        response = self.agent.answer(
+            ChatRequest(question=question), force_template=True
+        )
         return {
             "question": question,
             "knowledge_gap": response.needs_escalation or not response.citations,

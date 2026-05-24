@@ -21,7 +21,9 @@ class QualityReport:
     rejected: bool
 
 
-def assess_sections(document: LoadedDocument, sections: tuple[LoadedSection, ...]) -> tuple[tuple[LoadedSection, ...], list[str], int]:
+def assess_sections(
+    document: LoadedDocument, sections: tuple[LoadedSection, ...]
+) -> tuple[tuple[LoadedSection, ...], list[str], int]:
     warnings: list[str] = []
     empty_sections = sum(1 for section in sections if not section.text.strip())
     usable_sections = tuple(section for section in sections if section.text.strip())
@@ -35,7 +37,9 @@ def assess_sections(document: LoadedDocument, sections: tuple[LoadedSection, ...
     return usable_sections, warnings, empty_sections
 
 
-def filter_chunks(chunks: list[TextChunk], *, min_words: int = 2) -> tuple[list[TextChunk], list[str]]:
+def filter_chunks(
+    chunks: list[TextChunk], *, min_words: int = 2
+) -> tuple[list[TextChunk], list[str]]:
     indexed: list[TextChunk] = []
     warnings: list[str] = []
     skipped_short = 0

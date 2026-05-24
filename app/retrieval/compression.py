@@ -20,7 +20,11 @@ def compress_results(
     query_terms = set(tokenize(query))
     compressed: list[SearchResult] = []
     for result in results:
-        sentences = [sentence.strip() for sentence in SENTENCE_SPLIT.split(result.record.text) if sentence.strip()]
+        sentences = [
+            sentence.strip()
+            for sentence in SENTENCE_SPLIT.split(result.record.text)
+            if sentence.strip()
+        ]
         if len(sentences) <= max_sentences:
             compressed.append(result)
             continue
@@ -30,6 +34,8 @@ def compress_results(
             reverse=True,
         )
         chosen = ranked_sentences[:max_sentences]
-        clone = type(result.record)(**{**result.record.__dict__, "text": " ".join(chosen)})
+        clone = type(result.record)(
+            **{**result.record.__dict__, "text": " ".join(chosen)}
+        )
         compressed.append(SearchResult(record=clone, score=result.score))
     return compressed

@@ -9,7 +9,9 @@ from .vector_store import SearchResult
 
 
 class FinalReranker:
-    def rerank(self, query: str, candidates: list[SearchResult], *, top_k: int) -> list[SearchResult]:
+    def rerank(
+        self, query: str, candidates: list[SearchResult], *, top_k: int
+    ) -> list[SearchResult]:
         return candidates[:top_k]
 
 
@@ -18,14 +20,22 @@ class LexicalFinalReranker(FinalReranker):
     semantic_weight: float = 0.75
     lexical_weight: float = 0.25
 
-    def rerank(self, query: str, candidates: list[SearchResult], *, top_k: int) -> list[SearchResult]:
+    def rerank(
+        self, query: str, candidates: list[SearchResult], *, top_k: int
+    ) -> list[SearchResult]:
         query_terms = set(tokenize(query))
         reranked = []
         for candidate in candidates:
             candidate_terms = set(tokenize(candidate.record.text))
-            overlap = len(query_terms.intersection(candidate_terms)) / max(1, len(query_terms))
-            score = self.semantic_weight * candidate.score + self.lexical_weight * overlap
-            reranked.append(SearchResult(record=candidate.record, score=float(min(1.0, score))))
+            overlap = len(query_terms.intersection(candidate_terms)) / max(
+                1, len(query_terms)
+            )
+            score = (
+                self.semantic_weight * candidate.score + self.lexical_weight * overlap
+            )
+            reranked.append(
+                SearchResult(record=candidate.record, score=float(min(1.0, score)))
+            )
         reranked.sort(key=lambda result: result.score, reverse=True)
         return reranked[:top_k]
 
@@ -36,10 +46,14 @@ class CrossEncoderFinalReranker(FinalReranker):
 
         self.model = CrossEncoder(model_name)
 
-    def rerank(self, query: str, candidates: list[SearchResult], *, top_k: int) -> list[SearchResult]:
+    def rerank(
+        self, query: str, candidates: list[SearchResult], *, top_k: int
+    ) -> list[SearchResult]:
         if not candidates:
             return []
-        scores = self.model.predict([(query, candidate.record.text) for candidate in candidates])
+        scores = self.model.predict(
+            [(query, candidate.record.text) for candidate in candidates]
+        )
         ranked = [
             SearchResult(record=candidate.record, score=float(score))
             for candidate, score in zip(candidates, scores, strict=True)

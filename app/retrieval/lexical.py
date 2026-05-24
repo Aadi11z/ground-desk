@@ -55,9 +55,7 @@ class BM25Index:
             self.document_frequencies.update(term_frequencies.keys())
 
         self.average_document_length = (
-            total_length / len(self.documents)
-            if self.documents
-            else 0.0
+            total_length / len(self.documents) if self.documents else 0.0
         )
 
     def search(self, query: str, top_k: int = 5) -> list[SearchResult]:
@@ -70,10 +68,7 @@ class BM25Index:
 
         scored: list[tuple[_LexicalDocument, float]] = []
         for document in self.documents:
-            score = sum(
-                self._score_term(term, document)
-                for term in query_terms
-            )
+            score = sum(self._score_term(term, document) for term in query_terms)
             if score > 0:
                 scored.append((document, score))
 
@@ -98,16 +93,25 @@ class BM25Index:
         document_count = len(self.documents)
         containing_documents = self.document_frequencies.get(term, 0)
         inverse_document_frequency = math.log(
-            1 + (document_count - containing_documents + 0.5) / (containing_documents + 0.5)
+            1
+            + (document_count - containing_documents + 0.5)
+            / (containing_documents + 0.5)
         )
-        normalization = 1 - self.b + self.b * (
-            document.length / self.average_document_length
-            if self.average_document_length
-            else 0.0
+        normalization = (
+            1
+            - self.b
+            + self.b
+            * (
+                document.length / self.average_document_length
+                if self.average_document_length
+                else 0.0
+            )
         )
-        return inverse_document_frequency * (
-            frequency * (self.k1 + 1)
-        ) / (frequency + self.k1 * normalization)
+        return (
+            inverse_document_frequency
+            * (frequency * (self.k1 + 1))
+            / (frequency + self.k1 * normalization)
+        )
 
 
 def _record_text(record: ChunkRecord) -> str:

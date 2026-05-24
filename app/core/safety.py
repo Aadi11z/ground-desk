@@ -7,7 +7,9 @@ import re
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
-    re.compile(r"(?:api[_-]?key|x-llm-api-key)\s*[:=]\s*[A-Za-z0-9_\-\.]{8,}", re.IGNORECASE),
+    re.compile(
+        r"(?:api[_-]?key|x-llm-api-key)\s*[:=]\s*[A-Za-z0-9_\-\.]{8,}", re.IGNORECASE
+    ),
 ]
 
 
@@ -31,6 +33,7 @@ def strip_prompt_injection(text: str) -> str:
     ]
     sanitized = text
     for pattern in patterns:
-        sanitized = re.sub(pattern, "[removed unsafe instruction]", sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(
+            pattern, "[removed unsafe instruction]", sanitized, flags=re.IGNORECASE
+        )
     return sanitized
-

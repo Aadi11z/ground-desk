@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def demo_product_html() -> str:
-    return r'''<!doctype html>
+    return r"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -477,4 +477,4 @@ def demo_product_html() -> str:
     el("uploadBtn").addEventListener("click", upload);
   </script>
 </body>
-</html>'''
+</html>"""

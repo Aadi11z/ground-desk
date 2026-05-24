@@ -69,7 +69,10 @@ class EmbeddingModel:
             except Exception:
                 self._gemini_client = None
 
-        if self.model_name.startswith("gemini-embedding") and self._gemini_client is None:
+        if (
+            self.model_name.startswith("gemini-embedding")
+            and self._gemini_client is None
+        ):
             self.mrl_dimensions = (384,)
             return
 
@@ -94,7 +97,9 @@ class EmbeddingModel:
         batch = self.encode_queries(texts)
         return batch.vectors[batch.default_name]
 
-    def encode_documents(self, texts: Iterable[str], titles: Iterable[str] | None = None) -> EmbeddingBatch:
+    def encode_documents(
+        self, texts: Iterable[str], titles: Iterable[str] | None = None
+    ) -> EmbeddingBatch:
         return self._encode(texts, task_type="RETRIEVAL_DOCUMENT", titles=titles)
 
     def encode_queries(self, texts: Iterable[str]) -> EmbeddingBatch:
@@ -134,12 +139,16 @@ class EmbeddingModel:
 
         self._ensure_sentence_model()
         if self._model is not None:
-            vectors = self._model.encode(text_list, normalize_embeddings=True, show_progress_bar=False)
+            vectors = self._model.encode(
+                text_list, normalize_embeddings=True, show_progress_bar=False
+            )
             matrix = np.asarray(vectors, dtype=np.float32)
             return EmbeddingBatch({f"dense_{matrix.shape[1]}": matrix})
 
         matrices = {
-            f"dense_{dimension}": np.vstack([_hash_embed(text, dimension) for text in text_list]).astype(np.float32)
+            f"dense_{dimension}": np.vstack(
+                [_hash_embed(text, dimension) for text in text_list]
+            ).astype(np.float32)
             for dimension in self.mrl_dimensions
         }
         return EmbeddingBatch(matrices)
@@ -159,7 +168,9 @@ class EmbeddingModel:
             content = text
             config_kwargs = {"output_dimensionality": output_dimensionality}
             if self._uses_embedding_2():
-                content = _format_embedding_2_content(text, task_type=task_type, title=title)
+                content = _format_embedding_2_content(
+                    text, task_type=task_type, title=title
+                )
             else:
                 config_kwargs["task_type"] = task_type
                 if task_type == "RETRIEVAL_DOCUMENT" and title:
@@ -218,7 +229,9 @@ def _normalize_rows(matrix: np.ndarray) -> np.ndarray:
     return matrix / norms
 
 
-def _format_embedding_2_content(text: str, *, task_type: str, title: str | None = None) -> str:
+def _format_embedding_2_content(
+    text: str, *, task_type: str, title: str | None = None
+) -> str:
     if task_type == "RETRIEVAL_DOCUMENT":
         document_title = title or "none"
         return f"title: {document_title} | text: {text}"

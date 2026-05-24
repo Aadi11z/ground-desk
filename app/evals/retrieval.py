@@ -50,7 +50,9 @@ def run_retrieval_evals(
         vectors = embeddings.encode_queries([case.question]).vectors
         ranked = retriever.retrieve(case.question, vectors, top_k=top_k)
         ranked_titles = [result.record.title for result in ranked]
-        relevance = [1 if title in case.relevant_titles else 0 for title in ranked_titles]
+        relevance = [
+            1 if title in case.relevant_titles else 0 for title in ranked_titles
+        ]
         first_relevant_rank = next(
             (index for index, value in enumerate(relevance, start=1) if value),
             None,
@@ -82,7 +84,11 @@ def run_retrieval_evals(
 def _ndcg(relevance: list[int]) -> float:
     if not relevance:
         return 0.0
-    dcg = sum(value / math.log2(index + 1) for index, value in enumerate(relevance, start=1))
+    dcg = sum(
+        value / math.log2(index + 1) for index, value in enumerate(relevance, start=1)
+    )
     ideal = sorted(relevance, reverse=True)
-    idcg = sum(value / math.log2(index + 1) for index, value in enumerate(ideal, start=1))
+    idcg = sum(
+        value / math.log2(index + 1) for index, value in enumerate(ideal, start=1)
+    )
     return dcg / idcg if idcg else 0.0
