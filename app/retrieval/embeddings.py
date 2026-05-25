@@ -36,9 +36,8 @@ class EmbeddingBatch:
 class EmbeddingModel:
     """Use Gemini MRL when configured, otherwise fall back to local embeddings.
 
-    The public `.encode()` method remains as a backward-compatible single-vector
-    path. New ingestion/retrieval code should prefer `.encode_documents()` and
-    `.encode_queries()` so it can use all available representations.
+    Document and query APIs return every available vector representation so
+    ingestion and retrieval can select the appropriate embedding size.
     """
 
     def __init__(
@@ -92,10 +91,6 @@ class EmbeddingModel:
     @property
     def vector_names(self) -> tuple[str, ...]:
         return tuple(f"dense_{dimension}" for dimension in self.mrl_dimensions)
-
-    def encode(self, texts: Iterable[str]) -> np.ndarray:
-        batch = self.encode_queries(texts)
-        return batch.vectors[batch.default_name]
 
     def encode_documents(
         self, texts: Iterable[str], titles: Iterable[str] | None = None

@@ -279,9 +279,10 @@ def test_hybrid_retrieval_promotes_exact_token_matches():
             ][:top_k]
 
     retriever = HybridRetriever(Settings(), FakeStore())
+    query_embeddings = EmbeddingModel("unit-test").encode_queries(["E_CONNRESET"]).vectors
     results = retriever.retrieve(
         "What does E_CONNRESET mean?",
-        query_embedding=EmbeddingModel("unit-test").encode(["E_CONNRESET"])[0],
+        query_embeddings=query_embeddings,
         top_k=2,
     )
 
@@ -309,9 +310,10 @@ def test_sparse_retrieval_mode_uses_lexical_index_only():
             raise AssertionError("dense search should not run in sparse mode")
 
     retriever = HybridRetriever(Settings(retrieval_mode="sparse"), FakeStore())
+    query_embeddings = EmbeddingModel("unit-test").encode_queries(["refund"]).vectors
     results = retriever.retrieve(
         "Annual Plus refund",
-        query_embedding=EmbeddingModel("unit-test").encode(["refund"])[0],
+        query_embeddings=query_embeddings,
         top_k=1,
     )
 
