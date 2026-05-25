@@ -115,6 +115,15 @@ def demo_product_html() -> str:
     .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--green); }
     .dot.warn { background: var(--amber); }
     .doc-list { display: grid; gap: 9px; }
+    .benchmark {
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .benchmark-name { color: #1e3a8a; font-size: 12px; font-weight: 850; }
+    .benchmark-value { font-size: 26px; font-weight: 950; color: var(--brand-dark); letter-spacing: -.045em; margin-top: 7px; }
+    .benchmark-meta { color: #475569; font-size: 12px; line-height: 1.5; margin-top: 5px; }
     .doc {
       border: 1px solid var(--line);
       background: #fff;
@@ -274,6 +283,16 @@ def demo_product_html() -> str:
         <div id="documents" class="doc-list"><div class="empty">Loading documents…</div></div>
       </div>
 
+      <div>
+        <div class="section-title">Measured retrieval</div>
+        <div class="benchmark">
+          <div class="benchmark-name" id="benchmarkName">Loading benchmark report…</div>
+          <div class="benchmark-value" id="benchmarkValue">—</div>
+          <div class="benchmark-meta" id="benchmarkMeta"></div>
+          <div class="benchmark-meta" id="benchmarkGemini"></div>
+        </div>
+      </div>
+
       <details>
         <summary>Admin ingestion</summary>
         <p class="help">Optional for the demo. Upload Markdown, TXT, or PDF to index it into Qdrant for the demo workspace.</p>
@@ -402,6 +421,42 @@ def demo_product_html() -> str:
       }
     }
 
+    async function loadBenchmark() {
+      try {
+        const res = await fetch("/api/benchmark/summary", {cache: "no-store"});
+        const report = await res.json();
+        if (!report.available || !report.reports || !report.reports.length) {
+          el("benchmarkName").textContent = "No vetted report shipped";
+          el("benchmarkValue").textContent = "—";
+          el("benchmarkMeta").textContent = "Run the labelled benchmark and commit its reviewed report.";
+          el("benchmarkGemini").textContent = "";
+          return;
+        }
+        const full = report.reports.find(item => item.dataset && item.dataset.name === "nfcorpus") || report.reports[0];
+        const preferred = full.runs.find(run => String(run.strategy).startsWith("hybrid")) || full.runs[0];
+        const metrics = preferred.metrics || {};
+        const hitRate = Math.round(Number(metrics["success@5"] || 0) * 1000) / 10;
+        const mrr = Number(metrics["mrr@10"] || 0).toFixed(3);
+        const dataset = full.dataset || {};
+        el("benchmarkName").textContent = `${dataset.name || "Benchmark"} · ${preferred.strategy}`;
+        el("benchmarkValue").textContent = `${hitRate}% hit@5`;
+        el("benchmarkMeta").textContent = `${dataset.documents || "—"} docs · ${dataset.evaluated_queries || "—"} labelled queries · MRR@10 ${mrr}. Retrieval only; not answer accuracy.`;
+        const gemini = report.reports.find(item => item.dataset && String(item.dataset.name).includes("gemini_slice"));
+        if (gemini) {
+          const geminiRun = gemini.runs.find(run => String(run.strategy).startsWith("hybrid")) || gemini.runs[0];
+          const geminiHitRate = Math.round(Number(geminiRun.metrics["success@5"] || 0) * 1000) / 10;
+          el("benchmarkGemini").textContent = `Gemini Embedding 2 verified on controlled slice: ${gemini.dataset.documents} docs · ${gemini.dataset.evaluated_queries} labelled queries · ${geminiHitRate}% hit@5.`;
+        } else {
+          el("benchmarkGemini").textContent = "";
+        }
+      } catch {
+        el("benchmarkName").textContent = "Benchmark report unavailable";
+        el("benchmarkValue").textContent = "—";
+        el("benchmarkMeta").textContent = "";
+        el("benchmarkGemini").textContent = "";
+      }
+    }
+
     async function ask() {
       const question = el("question").value.trim();
       if (!question) return;
@@ -465,6 +520,7 @@ def demo_product_html() -> str:
     async function refreshAll() {
       await loadHealth();
       await loadDocuments();
+      await loadBenchmark();
     }
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
     function cleanAnswer(value) { return String(value).replace(/\{?\s*chunk_id\s*:\s*[^}\s]+(?:\s*\})?/gi, "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ").trim(); }

@@ -1,0 +1,88 @@
+{
+  "created_at": "2026-05-25T09:42:05.374326+00:00",
+  "dataset": {
+    "name": "nfcorpus",
+    "split": "test",
+    "documents": 3633,
+    "labelled_queries": 323,
+    "evaluated_queries": 323,
+    "query_limit": null,
+    "qrels_evaluation_unit": "top-k retrieved chunks collapsed to source documents"
+  },
+  "index": {
+    "documents": 3633,
+    "chunks": 6549,
+    "embedding_backend": "sentence-transformers",
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "vector_dimensions": {
+      "dense_384": 384
+    },
+    "vector_footprint_bytes": 10059264,
+    "build_seconds": 209.87515625000015
+  },
+  "runs": [
+    {
+      "strategy": "dense+lexical",
+      "num_queries": 323,
+      "metrics": {
+        "recall@1": 0.06017651469785521,
+        "recall@3": 0.10121977673643669,
+        "recall@5": 0.1241900538162873,
+        "recall@10": 0.15145301589411642,
+        "success@1": 0.47368421052631576,
+        "success@3": 0.5975232198142415,
+        "success@5": 0.6439628482972136,
+        "success@10": 0.6780185758513931,
+        "mrr@10": 0.5441827608236277,
+        "ndcg@10": 0.325812761263615,
+        "map@10": 0.2301578877164901,
+        "no_hit_rate@10": 0.3219814241486068,
+        "latency_p50_ms": 30.47304199935752,
+        "latency_p95_ms": 102.71554940081815
+      },
+      "failure_count": 104
+    },
+    {
+      "strategy": "hybrid+lexical",
+      "num_queries": 323,
+      "metrics": {
+        "recall@1": 0.05719956993851488,
+        "recall@3": 0.10465880036570564,
+        "recall@5": 0.12943749222446077,
+        "recall@10": 0.1564228314992157,
+        "success@1": 0.47678018575851394,
+        "success@3": 0.6037151702786377,
+        "success@5": 0.6408668730650154,
+        "success@10": 0.6934984520123839,
+        "mrr@10": 0.5496191459039756,
+        "ndcg@10": 0.3184334486286929,
+        "map@10": 0.22569946107097807,
+        "no_hit_rate@10": 0.3065015479876161,
+        "latency_p50_ms": 37.14333300013095,
+        "latency_p95_ms": 54.39709580005
+      },
+      "failure_count": 99
+    },
+    {
+      "strategy": "adaptive+lexical",
+      "num_queries": 323,
+      "metrics": {
+        "recall@1": 0.05665106370234114,
+        "recall@3": 0.10318795091976364,
+        "recall@5": 0.1224815325674177,
+        "recall@10": 0.1490944242092347,
+        "success@1": 0.46439628482972134,
+        "success@3": 0.5913312693498453,
+        "success@5": 0.631578947368421,
+        "success@10": 0.6842105263157895,
+        "mrr@10": 0.5391198584697037,
+        "ndcg@10": 0.31139658644141677,
+        "map@10": 0.21875067570888004,
+        "no_hit_rate@10": 0.3157894736842105,
+        "latency_p50_ms": 51.37891699996544,
+        "latency_p95_ms": 67.40422559960278
+      },
+      "failure_count": 102
+    }
+  ]
+}

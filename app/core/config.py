@@ -30,7 +30,7 @@ class Settings:
     default_workspace_id: str = os.getenv("DEFAULT_WORKSPACE_ID", "demo")
     max_context_chunks: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "5"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.35"))
-    retrieval_mode: str = os.getenv("RETRIEVAL_MODE", "adaptive")
+    retrieval_mode: str = os.getenv("RETRIEVAL_MODE", "hybrid")
     dense_candidate_k: int = int(os.getenv("DENSE_CANDIDATE_K", "20"))
     sparse_candidate_k: int = int(os.getenv("SPARSE_CANDIDATE_K", "20"))
     coarse_candidate_k: int = int(os.getenv("COARSE_CANDIDATE_K", "100"))
@@ -40,7 +40,7 @@ class Settings:
     adaptive_retrieval_enabled: bool = (
         os.getenv(
             "ADAPTIVE_RETRIEVAL",
-            "true",
+            "false",
         ).lower()
         == "true"
     )
@@ -59,6 +59,12 @@ class Settings:
         os.getenv(
             "CHAT_HISTORY_PATH",
             "data/chat_history.jsonl",
+        )
+    )
+    benchmark_report_path: Path = Path(
+        os.getenv(
+            "BENCHMARK_REPORT_PATH",
+            "benchmarks/reports/nfcorpus_bge.json",
         )
     )
 

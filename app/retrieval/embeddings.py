@@ -7,6 +7,7 @@ import hashlib
 import math
 import os
 import re
+import time
 from typing import Iterable
 
 import numpy as np
@@ -47,10 +48,12 @@ class EmbeddingModel:
         provider: str = "auto",
         mrl_dimensions: tuple[int, ...] | None = None,
         api_key: str | None = None,
+        request_delay_seconds: float = 0.0,
     ):
         self.model_name = model_name
         self.provider = provider.lower()
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.request_delay_seconds = max(0.0, request_delay_seconds)
         requested_dimensions = tuple(sorted(mrl_dimensions or (768, 1536, 3072)))
         self.backend = "hashing"
         self._model = None
@@ -177,6 +180,8 @@ class EmbeddingModel:
             )
             embedding = result.embeddings[0]
             vectors.append(np.asarray(embedding.values, dtype=np.float32))
+            if self.request_delay_seconds:
+                time.sleep(self.request_delay_seconds)
         return _normalize_rows(np.vstack(vectors))
 
     def _uses_embedding_2(self) -> bool:

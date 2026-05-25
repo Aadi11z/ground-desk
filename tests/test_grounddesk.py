@@ -32,6 +32,15 @@ from app.evals.retrieval import run_retrieval_evals
 from app.evals.answers import run_answer_quality_evals
 from app.evals.synthetic import generate_synthetic_eval_dataset
 from app.evals.variants import compare_retrieval_variants
+from app.evals.benchmark import (
+    build_benchmark_index,
+    build_benchmark_report,
+    evaluate_retrieval_strategy,
+    load_beir_dataset,
+    make_retriever,
+    report_as_markdown,
+    select_labelled_slice,
+)
 
 
 def make_agent(tmp_path: Path):
@@ -510,6 +519,86 @@ def test_retrieval_eval_reports_ranking_metrics(tmp_path):
     assert "recall@3" in report
     assert "mrr" in report
     assert "ndcg" in report
+
+
+def test_beir_benchmark_evaluates_qrels_and_builds_scorecard(tmp_path):
+    dataset_dir = tmp_path / "nfcorpus"
+    (dataset_dir / "qrels").mkdir(parents=True)
+    (dataset_dir / "corpus.jsonl").write_text(
+        "\n".join(
+            [
+                '{"_id":"auth","title":"Authentication","text":"Password reset emails arrive within five minutes."}',
+                '{"_id":"billing","title":"Billing","text":"Invoices can be downloaded from the billing settings page."}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (dataset_dir / "queries.jsonl").write_text(
+        "\n".join(
+            [
+                '{"_id":"q1","text":"password reset email"}',
+                '{"_id":"q2","text":"download invoice billing"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (dataset_dir / "qrels" / "test.tsv").write_text(
+        "query-id\tcorpus-id\tscore\nq1\tauth\t1\nq2\tbilling\t1\n",
+        encoding="utf-8",
+    )
+
+    dataset = load_beir_dataset(dataset_dir)
+    embeddings = EmbeddingModel("unit-test")
+    store, stats = build_benchmark_index(
+        dataset, embeddings, index_dir=tmp_path / "benchmark-index"
+    )
+    run = evaluate_retrieval_strategy(
+        dataset,
+        retriever=make_retriever(
+            mode="sparse", store=store, embeddings=embeddings, final_reranker="none"
+        ),
+        embeddings=embeddings,
+        strategy="sparse+none",
+    )
+    report = build_benchmark_report(dataset, stats, [run])
+    markdown = report_as_markdown(report)
+
+    assert stats.documents == 2
+    assert run["metrics"]["recall@5"] == 1.0
+    assert run["metrics"]["mrr@10"] == 1.0
+    assert "Retrieval Performance" in markdown
+    assert "sparse+none" in markdown
+
+
+def test_labelled_benchmark_slice_retains_relevant_documents(tmp_path):
+    dataset_dir = tmp_path / "slice"
+    (dataset_dir / "qrels").mkdir(parents=True)
+    (dataset_dir / "corpus.jsonl").write_text(
+        "\n".join(
+            f'{{\"_id\":\"doc{i}\",\"title\":\"Doc {i}\",\"text\":\"Text for document {i}.\"}}'
+            for i in range(6)
+        ) + "\n",
+        encoding="utf-8",
+    )
+    (dataset_dir / "queries.jsonl").write_text(
+        '{"_id":"q1","text":"one"}\n{"_id":"q2","text":"two"}\n',
+        encoding="utf-8",
+    )
+    (dataset_dir / "qrels" / "test.tsv").write_text(
+        "query-id\tcorpus-id\tscore\nq1\tdoc1\t1\nq2\tdoc2\t1\n",
+        encoding="utf-8",
+    )
+    dataset = load_beir_dataset(dataset_dir)
+
+    sliced = select_labelled_slice(
+        dataset, query_count=2, corpus_document_count=4, seed=42
+    )
+
+    assert set(sliced.documents).issuperset({"doc1", "doc2"})
+    assert len(sliced.documents) == 4
+    assert sliced.selection["not_full_benchmark"] is True
 
 
 def test_adaptive_query_planner_rewrites_and_expands_ambiguous_login_query():

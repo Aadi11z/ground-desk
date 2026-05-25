@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r re
 
 COPY app ./app
 COPY sample_corpus ./sample_corpus
+COPY benchmarks/reports ./benchmarks/reports
 COPY run_demo.py .
 
 EXPOSE 8080

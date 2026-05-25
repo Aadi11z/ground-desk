@@ -6,6 +6,7 @@ __pycache__/
 .git/
 data/
 results/
+benchmarks/data/
 *.pyc
 *.pyo
 *.pyd
