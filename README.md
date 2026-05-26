@@ -69,6 +69,7 @@ do not enable it on the public demo before authentication is implemented.
 ```text
 GET    /api/health
 GET    /api/benchmark/summary
+GET    /api/client-config
 GET    /api/documents
 POST   /api/documents
 PUT    /api/documents/{document_id}
@@ -192,14 +193,15 @@ Authorization: Bearer <supabase-access-token>
 X-Workspace-ID: acme
 ```
 
-FastAPI validates the token through Supabase Auth, verifies the membership in
-PostgreSQL, and only then applies the workspace filter to retrieval. The new
-`GET /api/me/workspaces` endpoint returns the authenticated user's available
-workspaces for a future frontend selector.
+FastAPI validates the token through Supabase Auth, verifies membership in
+PostgreSQL, and only then applies the workspace filter to retrieval. The
+frontend now supports email/password sign-in, refreshable browser sessions,
+authorized workspace selection, personal saved-thread display, and
+answer-feedback submission.
 
-The current HTML frontend does not yet implement Supabase sign-in. Keep
-`AUTH_MODE=demo` on the public UI deployment until the authentication frontend
-commit is added, or test authenticated mode using API requests.
+Use `AUTH_MODE=demo` for the public interview demo if you do not yet want to
+provision user accounts. Enable `AUTH_MODE=supabase` once the migrations and
+at least one `workspace_members` record exist.
 
 ## Retrieval Benchmark Demo
 

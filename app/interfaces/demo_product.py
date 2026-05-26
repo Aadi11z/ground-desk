@@ -85,6 +85,39 @@ def demo_product_html() -> str:
       font-weight: 750;
       color: #334155;
     }
+    .hidden { display: none !important; }
+    .access-panel, .thread-panel {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .access-panel { display: grid; gap: 9px; }
+    .access-title { font-weight: 850; font-size: 13px; color: #334155; }
+    .access-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .access-panel input, .access-panel select { padding: 10px 11px; border-radius: 12px; }
+    .access-actions { display: flex; gap: 8px; }
+    .access-actions button { flex: 1; }
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 12px;
+      padding: 10px;
+      outline: none;
+    }
+    .threads { display: grid; gap: 7px; max-height: 258px; overflow-y: auto; margin-top: 9px; }
+    .thread {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 9px;
+      cursor: pointer;
+    }
+    .thread:hover, .thread.active { border-color: #93c5fd; background: #eff6ff; }
+    .thread-question { font-size: 12px; font-weight: 750; line-height: 1.35; color: #334155; }
+    .thread-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
     .section-title {
       margin: 4px 0 10px;
       font-size: 11px;
@@ -219,6 +252,23 @@ def demo_product_html() -> str:
     .citation-title { display: flex; justify-content: space-between; gap: 12px; font-weight: 900; font-size: 13px; margin-bottom: 7px; }
     .snippet, .help, .empty { color: var(--muted); font-size: 13px; line-height: 1.5; }
     .score { color: var(--brand-dark); white-space: nowrap; }
+    .feedback {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .feedback button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #334155;
+      padding: 8px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .feedback button:hover { border-color: #93c5fd; background: #eff6ff; }
     .alert {
       display: none;
       border: 1px solid #fed7aa;
@@ -268,6 +318,30 @@ def demo_product_html() -> str:
       </div>
 
       <div>
+        <div class="section-title">Access</div>
+        <div class="access-panel" id="demoAccess">
+          <div class="access-title">Public demo</div>
+          <div class="access-meta">This session is restricted to the bundled demo workspace.</div>
+        </div>
+        <form class="access-panel hidden" id="signInPanel">
+          <div class="access-title">Team sign in</div>
+          <div class="access-meta">Use your organization account to access its knowledge base.</div>
+          <input type="email" id="email" autocomplete="email" placeholder="Work email" required>
+          <input type="password" id="password" autocomplete="current-password" placeholder="Password" required>
+          <button class="primary-btn" id="signInBtn" type="submit">Sign in</button>
+          <div class="access-meta" id="authStatus"></div>
+        </form>
+        <div class="access-panel hidden" id="userPanel">
+          <div class="access-title" id="userEmail">Signed in</div>
+          <label class="access-meta" for="workspaceSelect">Workspace</label>
+          <select id="workspaceSelect"></select>
+          <div class="access-actions">
+            <button class="secondary-btn" id="signOutBtn">Sign out</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
         <div class="section-title">System health</div>
         <div class="status-grid">
           <div class="status-tile"><div class="status-value" id="docCount">—</div><div class="status-label">Documents</div></div>
@@ -280,6 +354,14 @@ def demo_product_html() -> str:
       <div>
         <div class="section-title">Knowledge base</div>
         <div id="documents" class="doc-list"><div class="empty">Loading documents…</div></div>
+      </div>
+
+      <div class="hidden" id="historyPanel">
+        <div class="section-title">My recent questions</div>
+        <div class="thread-panel">
+          <button class="secondary-btn" id="newThreadBtn" style="width:100%">New question thread</button>
+          <div class="threads" id="history"><div class="empty">No saved conversations yet.</div></div>
+        </div>
       </div>
 
       <div>
@@ -306,7 +388,7 @@ def demo_product_html() -> str:
             <span class="pill">Generation: Gemini</span>
             <span class="pill">Embeddings: <span id="embedding">—</span></span>
           </div>
-          <div class="workspace">Workspace: demo</div>
+          <div class="workspace">Workspace: <span id="workspaceName">demo</span></div>
         </div>
       </section>
 
@@ -330,6 +412,12 @@ def demo_product_html() -> str:
               <span class="metric" id="confidence">Confidence: —</span>
               <span class="metric" id="escalation">Escalation: —</span>
               <span class="metric" id="trace">Trace: —</span>
+            </div>
+            <div class="feedback hidden" id="feedbackPanel">
+              <span class="help">Was this grounded answer useful?</span>
+              <button id="feedbackUp">Helpful</button>
+              <button id="feedbackDown">Needs review</button>
+              <span class="help" id="feedbackStatus"></span>
             </div>
 
             <div class="label">Suggested support reply</div>
@@ -357,11 +445,73 @@ def demo_product_html() -> str:
       "What should I do if SSO users cannot sign in?",
       "Can you configure my payroll software?"
     ];
-    const workspaceId = "demo";
+    const SESSION_KEY = "grounddesk.supabase.session";
+    const state = {
+      config: {auth_mode: "demo", default_workspace_id: "demo"},
+      workspaceId: "demo",
+      session: null,
+      user: null,
+      conversationId: null,
+      lastTraceId: null,
+      history: []
+    };
     let lastHealth = {documents: 0, chunks: 0};
     const el = id => document.getElementById(id);
     const setText = (id, value) => { el(id).textContent = value; };
-    const jsonHeaders = extra => ({"Content-Type":"application/json", "X-Workspace-ID": workspaceId, ...(extra || {})});
+    const isTeamMode = () => state.config.auth_mode === "supabase";
+
+    async function headers(includeJson = false) {
+      const result = {"X-Workspace-ID": state.workspaceId};
+      if (includeJson) result["Content-Type"] = "application/json";
+      if (isTeamMode()) {
+        const active = await ensureSession();
+        if (!active) throw new Error("Sign in to access your workspace.");
+        result["Authorization"] = `Bearer ${state.session.access_token}`;
+      }
+      return result;
+    }
+
+    function saveSession(payload) {
+      state.session = {
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token,
+        expires_at_ms: payload.expires_at
+          ? Number(payload.expires_at) * 1000
+          : Date.now() + Number(payload.expires_in || 3600) * 1000
+      };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(state.session));
+    }
+
+    function clearSession() {
+      state.session = null;
+      state.user = null;
+      state.conversationId = null;
+      state.lastTraceId = null;
+      state.history = [];
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+
+    async function ensureSession() {
+      if (!state.session || !state.session.access_token) return false;
+      if (Date.now() < Number(state.session.expires_at_ms || 0) - 60000) return true;
+      if (!state.session.refresh_token) {
+        await signOut(false);
+        return false;
+      }
+      try {
+        const res = await fetch(`${state.config.supabase_url}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "apikey": state.config.supabase_publishable_key},
+          body: JSON.stringify({refresh_token: state.session.refresh_token})
+        });
+        if (!res.ok) throw new Error("Session expired.");
+        saveSession(await res.json());
+        return true;
+      } catch {
+        await signOut(false);
+        return false;
+      }
+    }
 
     function renderSamples() {
       el("samples").innerHTML = samples.map(q => `<button class="sample">${escapeHtml(q)}</button>`).join("");
@@ -371,14 +521,108 @@ def demo_product_html() -> str:
       }));
     }
 
+    async function loadClientConfig() {
+      const res = await fetch("/api/client-config", {cache: "no-store"});
+      if (!res.ok) throw new Error("Could not load application configuration.");
+      state.config = await res.json();
+      state.workspaceId = state.config.default_workspace_id || "demo";
+      setText("workspaceName", state.workspaceId);
+
+      if (!isTeamMode()) {
+        el("demoAccess").classList.remove("hidden");
+        el("signInPanel").classList.add("hidden");
+        el("userPanel").classList.add("hidden");
+        el("historyPanel").classList.add("hidden");
+        return;
+      }
+
+      el("demoAccess").classList.add("hidden");
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (saved) {
+        try { state.session = JSON.parse(saved); } catch { clearSession(); }
+      }
+      if (state.session && await ensureSession()) {
+        try {
+          await loadWorkspaces();
+          return;
+        } catch {
+          clearSession();
+        }
+      }
+      renderSignedOut();
+    }
+
+    function renderSignedOut(message = "") {
+      el("signInPanel").classList.remove("hidden");
+      el("userPanel").classList.add("hidden");
+      el("historyPanel").classList.add("hidden");
+      el("askBtn").disabled = true;
+      setText("authStatus", message);
+      el("documents").innerHTML = `<div class="empty">Sign in to view workspace documents.</div>`;
+    }
+
+    async function signIn(event) {
+      event.preventDefault();
+      el("signInBtn").disabled = true;
+      setText("authStatus", "Signing in…");
+      try {
+        const res = await fetch(`${state.config.supabase_url}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "apikey": state.config.supabase_publishable_key},
+          body: JSON.stringify({email: el("email").value.trim(), password: el("password").value})
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error_description || payload.msg || "Sign-in failed.");
+        saveSession(payload);
+        await loadWorkspaces();
+        await refreshWorkspaceData();
+      } catch (err) {
+        clearSession();
+        renderSignedOut(err.message);
+      } finally {
+        el("signInBtn").disabled = false;
+      }
+    }
+
+    async function signOut(revoke = true) {
+      if (revoke && state.session && state.session.access_token) {
+        fetch(`${state.config.supabase_url}/auth/v1/logout`, {
+          method: "POST",
+          headers: {"apikey": state.config.supabase_publishable_key, "Authorization": `Bearer ${state.session.access_token}`}
+        }).catch(() => {});
+      }
+      clearSession();
+      renderSignedOut("Signed out.");
+      resetAnswer();
+    }
+
+    async function loadWorkspaces() {
+      const res = await fetch("/api/me/workspaces", {headers: await headers(), cache: "no-store"});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not resolve workspace membership.");
+      state.user = data;
+      const workspaces = data.workspaces || [];
+      if (!workspaces.length) throw new Error("This account has no GroundDesk workspace membership.");
+      if (!workspaces.some(item => item.id === state.workspaceId)) state.workspaceId = workspaces[0].id;
+      el("workspaceSelect").innerHTML = workspaces.map(
+        item => `<option value="${escapeHtml(item.id)}" ${item.id === state.workspaceId ? "selected" : ""}>${escapeHtml(item.name)} (${escapeHtml(item.role)})</option>`
+      ).join("");
+      setText("userEmail", data.email || "Signed-in user");
+      setText("workspaceName", state.workspaceId);
+      el("signInPanel").classList.add("hidden");
+      el("userPanel").classList.remove("hidden");
+      el("historyPanel").classList.remove("hidden");
+      el("askBtn").disabled = false;
+    }
+
     async function loadHealth() {
       try {
         const res = await fetch("/api/health", {cache: "no-store"});
         const data = await res.json();
         lastHealth = data;
         setText("status", data.status || "ok");
-        setText("docCount", data.documents ?? "—");
-        setText("chunkCount", data.chunks ?? "—");
+        setText("docCount", isTeamMode() ? "Private" : (data.documents ?? "—"));
+        setText("chunkCount", isTeamMode() ? "Private" : (data.chunks ?? "—"));
         setText("embedding", data.embedding_model || "—");
         el("statusDot").className = `dot ${data.status === "ok" ? "" : "warn"}`;
         if (data.status !== "ok" || data.startup_error) {
@@ -394,9 +638,11 @@ def demo_product_html() -> str:
     }
 
     async function loadDocuments() {
+      if (isTeamMode() && !state.session) return;
       try {
-        const res = await fetch("/api/documents", {headers: {"X-Workspace-ID": workspaceId}, cache: "no-store"});
+        const res = await fetch("/api/documents", {headers: await headers(), cache: "no-store"});
         const docs = await res.json();
+        if (!res.ok) throw new Error(docs.detail || "Could not load documents.");
         if (!Array.isArray(docs) || !docs.length) {
           if ((lastHealth.chunks || 0) > 0) {
             el("documents").innerHTML = `<div class="kb-empty-issue">Qdrant has ${lastHealth.chunks} chunk(s), but this app build is not exposing document manifests yet. Redeploy the latest backend patch, then refresh.</div>`;
@@ -409,6 +655,54 @@ def demo_product_html() -> str:
       } catch {
         el("documents").innerHTML = `<div class="empty">Could not load documents.</div>`;
       }
+    }
+
+    async function loadHistory() {
+      if (!isTeamMode() || !state.session) return;
+      try {
+        const res = await fetch("/api/history", {headers: await headers(), cache: "no-store"});
+        const history = await res.json();
+        if (!res.ok) throw new Error(history.detail || "Could not load history.");
+        state.history = Array.isArray(history) ? history : [];
+        const latestThreads = [];
+        const seen = new Set();
+        state.history.forEach(item => {
+          if (!seen.has(item.conversation_id)) {
+            seen.add(item.conversation_id);
+            latestThreads.push(item);
+          }
+        });
+        if (!latestThreads.length) {
+          el("history").innerHTML = `<div class="empty">No saved conversations yet.</div>`;
+          return;
+        }
+        el("history").innerHTML = latestThreads.map(item => `
+          <div class="thread ${item.conversation_id === state.conversationId ? "active" : ""}" data-conversation="${escapeHtml(item.conversation_id)}">
+            <div class="thread-question">${escapeHtml(item.question || "Question")}</div>
+            <div class="thread-meta">${item.needs_escalation ? "Escalated" : "Answered"} · confidence ${Math.round(Number(item.confidence || 0) * 100)}%</div>
+          </div>`).join("");
+        document.querySelectorAll(".thread").forEach(node => node.addEventListener("click", () => selectThread(node.dataset.conversation)));
+      } catch (err) {
+        el("history").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function selectThread(conversationId) {
+      const item = state.history.find(row => row.conversation_id === conversationId);
+      if (!item) return;
+      state.conversationId = conversationId;
+      state.lastTraceId = item.trace_id;
+      el("question").value = item.question || "";
+      renderResponse(item);
+      loadHistory();
+    }
+
+    function newThread() {
+      state.conversationId = null;
+      state.lastTraceId = null;
+      el("question").value = "";
+      resetAnswer();
+      if (isTeamMode()) loadHistory();
     }
 
     async function loadBenchmark() {
@@ -448,6 +742,10 @@ def demo_product_html() -> str:
     }
 
     async function ask() {
+      if (isTeamMode() && !state.session) {
+        setText("authStatus", "Sign in before asking questions in a team workspace.");
+        return;
+      }
       const question = el("question").value.trim();
       if (!question) return;
       el("askBtn").disabled = true;
@@ -457,26 +755,20 @@ def demo_product_html() -> str:
       try {
         const res = await fetch("/api/chat", {
           method:"POST",
-          headers:jsonHeaders(),
-          body: JSON.stringify({question, top_k: 5, draft_ticket_reply: el("ticket").checked})
+          headers: await headers(true),
+          body: JSON.stringify({
+            question,
+            conversation_id: state.conversationId,
+            top_k: 5,
+            draft_ticket_reply: el("ticket").checked
+          })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Request failed");
-        el("answer").textContent = cleanAnswer(data.answer || "No answer returned.");
-        const confidence = Math.round((data.confidence || 0) * 100);
-        el("confidence").textContent = `Confidence: ${confidence}%`;
-        el("confidence").className = `metric ${confidence >= 60 ? "good" : "warn"}`;
-        el("escalation").textContent = `Escalation: ${data.needs_escalation ? "yes" : "no"}`;
-        el("escalation").className = `metric ${data.needs_escalation ? "warn" : "good"}`;
-        el("trace").textContent = `Trace: ${data.trace_id}`;
-        el("ticketReply").textContent = data.suggested_ticket_reply || "No support reply requested.";
-        if (data.citations && data.citations.length) {
-          el("citations").className = "";
-          el("citations").innerHTML = data.citations.map((c, i) => `<div class="citation"><div class="citation-title"><span>[${i + 1}] ${escapeHtml(c.title)}</span><span class="score">score ${Number(c.score || 0).toFixed(2)}</span></div><div class="snippet">${escapeHtml(c.snippet || "")}</div></div>`).join("");
-        } else {
-          el("citations").className = "empty";
-          el("citations").textContent = "No citations returned. GroundDesk should escalate this instead of inventing an answer.";
-        }
+        state.conversationId = data.conversation_id || state.conversationId;
+        state.lastTraceId = data.trace_id;
+        renderResponse(data);
+        if (isTeamMode()) await loadHistory();
       } catch (err) {
         el("answer").textContent = `Error: ${err.message}`;
         el("citations").className = "empty";
@@ -486,19 +778,94 @@ def demo_product_html() -> str:
       }
     }
 
+    function renderResponse(data) {
+      el("answer").textContent = cleanAnswer(data.answer || "No answer returned.");
+      const confidence = Math.round((data.confidence || 0) * 100);
+      el("confidence").textContent = `Confidence: ${confidence}%`;
+      el("confidence").className = `metric ${confidence >= 60 ? "good" : "warn"}`;
+      el("escalation").textContent = `Escalation: ${data.needs_escalation ? "yes" : "no"}`;
+      el("escalation").className = `metric ${data.needs_escalation ? "warn" : "good"}`;
+      el("trace").textContent = `Trace: ${data.trace_id || "—"}`;
+      el("ticketReply").textContent = data.suggested_ticket_reply || "No support reply requested.";
+      el("feedbackPanel").classList.remove("hidden");
+      setText("feedbackStatus", "");
+      if (data.citations && data.citations.length) {
+        el("citations").className = "";
+        el("citations").innerHTML = data.citations.map((c, i) => `<div class="citation"><div class="citation-title"><span>[${i + 1}] ${escapeHtml(c.title)}</span><span class="score">score ${Number(c.score || 0).toFixed(2)}</span></div><div class="snippet">${escapeHtml(c.snippet || "")}</div></div>`).join("");
+      } else {
+        el("citations").className = "empty";
+        el("citations").textContent = "No citations returned. GroundDesk should escalate this instead of inventing an answer.";
+      }
+    }
+
+    function resetAnswer() {
+      el("answer").textContent = "Ready for a support question.";
+      el("citations").className = "empty";
+      el("citations").textContent = "Citations appear after generation.";
+      el("ticketReply").textContent = "A paste-ready reply appears here when enabled.";
+      setText("confidence", "Confidence: —");
+      setText("escalation", "Escalation: —");
+      setText("trace", "Trace: —");
+      el("feedbackPanel").classList.add("hidden");
+    }
+
+    async function sendFeedback(rating, feedbackType) {
+      if (!state.lastTraceId) return;
+      try {
+        const res = await fetch("/api/feedback", {
+          method: "POST",
+          headers: await headers(true),
+          body: JSON.stringify({trace_id: state.lastTraceId, rating, feedback_type: feedbackType})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Feedback was not saved.");
+        setText("feedbackStatus", "Feedback saved.");
+      } catch (err) {
+        setText("feedbackStatus", err.message);
+      }
+    }
+
+    async function refreshWorkspaceData() {
+      await loadDocuments();
+      if (isTeamMode()) await loadHistory();
+    }
+
     async function refreshAll() {
       await loadHealth();
-      await loadDocuments();
       await loadBenchmark();
+      if (!isTeamMode() || state.session) await refreshWorkspaceData();
     }
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
     function cleanAnswer(value) { return String(value).replace(/\{?\s*chunk_id\s*:\s*[^}\s]+(?:\s*\})?/gi, "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ").trim(); }
 
-    renderSamples();
-    refreshAll();
+    async function initialize() {
+      renderSamples();
+      try {
+        await loadClientConfig();
+      } catch (err) {
+        el("healthAlert").style.display = "block";
+        el("healthAlert").textContent = err.message;
+      }
+      await refreshAll();
+    }
+
+    initialize();
     setInterval(refreshAll, 15000);
     el("askBtn").addEventListener("click", ask);
     el("refreshBtn").addEventListener("click", refreshAll);
+    el("signInPanel").addEventListener("submit", signIn);
+    el("signOutBtn").addEventListener("click", () => signOut(true));
+    el("workspaceSelect").addEventListener("change", async event => {
+      state.workspaceId = event.target.value;
+      state.conversationId = null;
+      state.lastTraceId = null;
+      setText("workspaceName", state.workspaceId);
+      resetAnswer();
+      await refreshWorkspaceData();
+    });
+    el("newThreadBtn").addEventListener("click", newThread);
+    el("feedbackUp").addEventListener("click", () => sendFeedback(5, "helpful"));
+    el("feedbackDown").addEventListener("click", () => sendFeedback(1, "needs_review"));
   </script>
 </body>
 </html>"""

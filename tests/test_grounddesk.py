@@ -5,6 +5,7 @@ import pytest
 
 from app.generation.agent import SupportAgent
 from app.generation.workflows import SupportWorkflowService
+from app.interfaces.demo_product import demo_product_html
 from app.core.auth import AccessController, AccessError, AuthenticatedUser
 from app.core.config import Settings
 from app.core.persistence import (
@@ -948,3 +949,14 @@ def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path
         controller.resolve(
             authorization="Bearer valid-token", requested_workspace_id="globex"
         )
+
+
+def test_product_interface_contains_authenticated_workspace_and_feedback_controls():
+    html = demo_product_html()
+
+    assert "/api/client-config" in html
+    assert "/api/me/workspaces" in html
+    assert 'id="signInPanel"' in html
+    assert 'id="workspaceSelect"' in html
+    assert 'id="historyPanel"' in html
+    assert "/api/feedback" in html
