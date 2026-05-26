@@ -13,7 +13,7 @@ import gradio as gr
 from ..generation.agent import SupportAgent
 from ..generation.workflows import SupportWorkflowService
 from ..core.config import settings
-from ..core.persistence import JsonlRepository
+from ..core.persistence import analytics_for, create_product_repository
 from ..core.workspace import (
     apply_workspace_filter,
     metadata_matches_workspace,
@@ -50,8 +50,7 @@ vector_store = create_vector_store(settings)
 ingestion_service = IngestionService(settings, embedding_model, vector_store)
 agent = SupportAgent(settings, embedding_model, vector_store)
 workflows = SupportWorkflowService(agent)
-feedback_repo = JsonlRepository(settings.feedback_path)
-chat_history_repo = JsonlRepository(settings.chat_history_path)
+product_repository = create_product_repository(settings)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 startup_error: str | None = None
@@ -61,7 +60,10 @@ def _require_admin(
     x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
 ) -> None:
     if not settings.admin_api_key:
-        return
+        raise HTTPException(
+            status_code=404,
+            detail="Management endpoints are disabled until authenticated administration is configured.",
+        )
     if x_admin_api_key != settings.admin_api_key:
         raise HTTPException(status_code=401, detail="Missing or invalid admin API key.")
 
@@ -109,6 +111,7 @@ def health() -> HealthResponse:
     try:
         documents = len(ingestion_service.list_documents())
         chunks = vector_store.count_chunks()
+        product_repository.healthcheck()
     except Exception as exc:
         health_error = health_error or str(exc)
     return HealthResponse(
@@ -269,17 +272,12 @@ def chat(
     scoped_request = apply_workspace_filter(request, workspace_id)
     try:
         response = agent.answer(scoped_request)
-        chat_history_repo.append(
-            {
-                "workspace_id": workspace_id,
-                "conversation_id": scoped_request.conversation_id,
-                "question": scoped_request.question,
-                "trace_id": response.trace_id,
-                "needs_escalation": response.needs_escalation,
-                "confidence": response.confidence,
-            }
+        conversation_id = product_repository.record_answer(
+            workspace_id, scoped_request, response
         )
-        return response
+        return response.model_copy(update={"conversation_id": conversation_id})
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -369,9 +367,10 @@ def feedback(
     request: FeedbackRequest,
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ) -> FeedbackResponse:
-    payload = request.model_dump()
-    payload["workspace_id"] = _workspace_id(x_workspace_id)
-    feedback_repo.append(payload)
+    try:
+        product_repository.record_feedback(_workspace_id(x_workspace_id), request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FeedbackResponse(accepted=True, trace_id=request.trace_id)
 
 
@@ -381,11 +380,7 @@ def history(
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
     workspace_id = _workspace_id(x_workspace_id)
-    return [
-        item
-        for item in chat_history_repo.read_all()
-        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
-    ]
+    return product_repository.list_history(workspace_id)
 
 
 @app.get("/api/analytics")
@@ -394,31 +389,7 @@ def analytics(
     x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
     workspace_id = _workspace_id(x_workspace_id)
-    history_items = [
-        item
-        for item in chat_history_repo.read_all()
-        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
-    ]
-    feedback_items = [
-        item
-        for item in feedback_repo.read_all()
-        if item.get("workspace_id", settings.default_workspace_id) == workspace_id
-    ]
-    return {
-        "messages": len(history_items),
-        "feedback_count": len(feedback_items),
-        "average_feedback": (
-            sum(item["rating"] for item in feedback_items) / len(feedback_items)
-            if feedback_items
-            else None
-        ),
-        "unresolved_query_rate": (
-            sum(bool(item["needs_escalation"]) for item in history_items)
-            / len(history_items)
-            if history_items
-            else 0.0
-        ),
-    }
+    return analytics_for(product_repository, workspace_id)
 
 
 def _document_text(document_id: str) -> str:
@@ -439,6 +410,7 @@ def app_demo() -> HTMLResponse:
     return HTMLResponse(demo_product_html())
 
 
-app = gr.mount_gradio_app(
-    app, build_interface(agent, ingestion_service, vector_store), path="/demo"
-)
+if settings.enable_gradio_admin:
+    app = gr.mount_gradio_app(
+        app, build_interface(agent, ingestion_service, vector_store), path="/demo"
+    )

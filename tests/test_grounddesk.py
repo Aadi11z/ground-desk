@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from app.generation.agent import SupportAgent
 from app.generation.workflows import SupportWorkflowService
 from app.core.config import Settings
+from app.core.persistence import DatabaseProductRepository, analytics_for
 from app.ingestion.loaders import LoadedDocument
 from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
 from app.retrieval.retriever import HybridRetriever
@@ -13,7 +15,7 @@ from app.retrieval.adaptive import AdaptiveQueryPlanner
 from app.retrieval.compression import compress_results
 from app.retrieval.rerank import LexicalFinalReranker
 from app.ingestion.service import IngestionService
-from app.core.models import ChatRequest
+from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.safety import redact_secrets, strip_prompt_injection
 from app.core.workspace import (
     apply_workspace_filter,
@@ -811,3 +813,61 @@ def test_out_of_scope_queries_short_circuit_to_escalation(tmp_path):
 
     assert response.citations == []
     assert response.needs_escalation
+
+
+def test_database_persistence_records_conversation_traces_and_feedback(tmp_path):
+    repository = DatabaseProductRepository(
+        f"sqlite:///{tmp_path / 'grounddesk.db'}", auto_create=True
+    )
+    response = ChatResponse(
+        answer="Billing admins can download invoices.",
+        citations=[],
+        confidence=0.8,
+        needs_escalation=False,
+        trace_id="trace_first",
+    )
+    conversation_id = repository.record_answer(
+        "acme",
+        ChatRequest(question="Can billing admins download invoices?"),
+        response,
+    )
+    repository.record_answer(
+        "acme",
+        ChatRequest(
+            question="Where is that page?",
+            conversation_id=conversation_id,
+        ),
+        response.model_copy(update={"trace_id": "trace_second"}),
+    )
+    repository.record_feedback(
+        "acme",
+        FeedbackRequest(
+            trace_id="trace_first",
+            rating=4,
+            feedback_type="helpful",
+            comment="Correct source.",
+        ),
+    )
+
+    history = repository.list_history("acme")
+    repository.healthcheck()
+    analytics = analytics_for(repository, "acme")
+
+    assert len(history) == 2
+    assert history[0]["conversation_id"] == conversation_id
+    assert history[0]["answer"] == "Billing admins can download invoices."
+    assert analytics["messages"] == 2
+    assert analytics["feedback_count"] == 1
+    assert analytics["average_feedback"] == 4
+
+
+def test_database_feedback_rejects_unknown_or_cross_workspace_trace(tmp_path):
+    repository = DatabaseProductRepository(
+        f"sqlite:///{tmp_path / 'grounddesk.db'}", auto_create=True
+    )
+
+    with pytest.raises(KeyError):
+        repository.record_feedback(
+            "another_workspace",
+            FeedbackRequest(trace_id="missing", rating=1),
+        )

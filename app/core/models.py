@@ -1,4 +1,21 @@
-"""Shared request/response models."""
+"""Shared request/response models.
+  ┌────────────────────────────┬────────────────────────────────────────────────────────────────────┐
+  │ Model                      │ Purpose                                                            │
+  ├────────────────────────────┼────────────────────────────────────────────────────────────────────┤
+  │ Citation                   │ Describes retrieved evidence returned with an answer               │
+  │ RetrievalFilters           │ Limits retrieval to selected documents, types, titles, or metadata │
+  │ ChatRequest                │ Input to the chat endpoint and support agent                       │
+  │ ChatResponse               │ Generated answer, citations, confidence, escalation result         │
+  │ DocumentRecord             │ Full document ingestion/listing representation                     │
+  │ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
+  │ UrlIngestRequest           │ URL input payload                                                  │
+  │ HealthResponse             │ API health/status output                                           │
+  │ WorkflowRequest            │ Input for support workflow endpoints                               │
+  │ ConversationSummaryRequest │ Conversation messages supplied for summarization                   │
+  │ FeedbackRequest            │ User feedback payload                                              │
+  │ FeedbackResponse           │ Confirmation that feedback was accepted                            │
+  └────────────────────────────┴────────────────────────────────────────────────────────────────────┘
+"""
 
 from __future__ import annotations
 
@@ -37,6 +54,7 @@ class ChatResponse(BaseModel):
     needs_escalation: bool
     suggested_ticket_reply: str | None = None
     trace_id: str
+    conversation_id: str | None = None
 
 
 class DocumentRecord(BaseModel):
@@ -87,7 +105,9 @@ class ConversationSummaryRequest(BaseModel):
 class FeedbackRequest(BaseModel):
     trace_id: str
     rating: int = Field(ge=1, le=5)
+    feedback_type: str | None = None
     comment: str | None = None
+    corrected_answer: str | None = None
 
 
 class FeedbackResponse(BaseModel):

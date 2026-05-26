@@ -11,6 +11,20 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class Settings:
+    """Configuration Table:
+    ┌────────────────────┬───────────────────────────────────────────────────────────────────┐
+    │ Configuration Area │ Examples                                                          │
+    ├────────────────────┼───────────────────────────────────────────────────────────────────┤
+    │ data locations     │ DATA_DIR, SAMPLE_DIR, FEEDBACK_PATH, CHAT_HISTORY_PATH            │
+    │ persistence        │ PERSISTENCE_BACKEND, DATABASE_URL, DATABASE_AUTO_CREATE           │
+    │ embeddings         │ EMBEDDING_MODEL, EMBEDDING_PROVIDER, EMBEDDING_DIMENSIONS         │
+    │ generation         │ GENERATION_PROVIDER, GENERATION_MODEL                             │
+    │ retrieval          │ RETRIEVAL_MODE, candidate counts, RRF weights, reranker selection │
+    │ access boundary    │ ADMIN_API_KEY, DEFAULT_WORKSPACE_ID                               │
+    │ vector storage     │ VECTOR_STORE, QDRANT_URL, QDRANT_COLLECTION                       │
+    │ benchmark output   │ BENCHMARK_REPORT_PATH                                             │
+    └────────────────────┴───────────────────────────────────────────────────────────────────┘
+    """
     app_name: str = "GroundDesk"
     data_dir: Path = Path(os.getenv("DATA_DIR", "data"))
     sample_dir: Path = Path(os.getenv("SAMPLE_DIR", "sample_corpus"))
@@ -27,6 +41,11 @@ class Settings:
     generation_provider: str = os.getenv("GENERATION_PROVIDER", "gemini")
     generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash")
     admin_api_key: str = os.getenv("ADMIN_API_KEY", "")
+    enable_gradio_admin: bool = os.getenv("ENABLE_GRADIO_ADMIN", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     default_workspace_id: str = os.getenv("DEFAULT_WORKSPACE_ID", "demo")
     max_context_chunks: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "5"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.35"))
@@ -61,6 +80,13 @@ class Settings:
             "data/chat_history.jsonl",
         )
     )
+    persistence_backend: str = os.getenv("PERSISTENCE_BACKEND", "jsonl")
+    database_url: str = os.getenv("DATABASE_URL", "")
+    database_auto_create: bool = os.getenv("DATABASE_AUTO_CREATE", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     benchmark_report_path: Path = Path(
         os.getenv(
             "BENCHMARK_REPORT_PATH",

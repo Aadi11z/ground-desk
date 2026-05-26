@@ -265,7 +265,6 @@ def demo_product_html() -> str:
 
       <div class="navlinks">
         <a href="/docs" target="_blank">OpenAPI</a>
-        <a href="/demo" target="_blank">Gradio</a>
       </div>
 
       <div>
@@ -293,15 +292,6 @@ def demo_product_html() -> str:
         </div>
       </div>
 
-      <details>
-        <summary>Admin ingestion</summary>
-        <p class="help">Optional for the demo. Upload Markdown, TXT, or PDF to index it into Qdrant for the demo workspace.</p>
-        <div class="upload">
-          <input type="file" id="file" accept=".pdf,.md,.markdown,.txt">
-          <button class="secondary-btn" id="uploadBtn">Index document</button>
-          <div class="help" id="uploadStatus"></div>
-        </div>
-      </details>
     </aside>
 
     <main class="main">
@@ -496,27 +486,6 @@ def demo_product_html() -> str:
       }
     }
 
-    async function upload() {
-      const file = el("file").files[0];
-      if (!file) { el("uploadStatus").textContent = "Choose a file first."; return; }
-      const body = new FormData();
-      body.append("file", file);
-      const extra = {"X-Workspace-ID": workspaceId};
-      el("uploadBtn").disabled = true;
-      el("uploadStatus").textContent = "Indexing document into Qdrant…";
-      try {
-        const res = await fetch("/api/documents", {method:"POST", headers:extra, body});
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Upload failed");
-        el("uploadStatus").textContent = `${data.status}: ${data.chunks_indexed} chunks indexed.`;
-        await refreshAll();
-      } catch (err) {
-        el("uploadStatus").textContent = `Upload failed: ${err.message}`;
-      } finally {
-        el("uploadBtn").disabled = false;
-      }
-    }
-
     async function refreshAll() {
       await loadHealth();
       await loadDocuments();
@@ -530,7 +499,6 @@ def demo_product_html() -> str:
     setInterval(refreshAll, 15000);
     el("askBtn").addEventListener("click", ask);
     el("refreshBtn").addEventListener("click", refreshAll);
-    el("uploadBtn").addEventListener("click", upload);
   </script>
 </body>
 </html>"""

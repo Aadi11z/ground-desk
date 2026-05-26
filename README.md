@@ -30,7 +30,9 @@ http://localhost:8000
 ```
 
 The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
-The Gradio admin/demo UI remains available at `http://localhost:8000/demo`.
+The normal-user product UI is available at `http://localhost:8000`. A local
+Gradio management UI can be enabled explicitly with `ENABLE_GRADIO_ADMIN=true`;
+do not enable it on the public demo before authentication is implemented.
 
 ## Core Features
 
@@ -45,10 +47,12 @@ The Gradio admin/demo UI remains available at `http://localhost:8000/demo`.
 - Higher-level support workflows: escalation notes, summaries, FAQ generation, knowledge-gap detection, and support-article suggestions.
 - Synthetic eval-data generation plus retrieval/answer-quality metrics.
 - BEIR/qrels benchmark runner that reports retrieval Recall, MRR, nDCG, MAP, no-hit rate, and latency on labelled datasets.
-- Local chat-history, feedback, analytics, and object-storage scaffolding.
+- PostgreSQL-compatible conversation, answer-trace, and feedback persistence,
+  with JSONL fallback for zero-setup local demonstrations.
 - Gemini-only generation using the server-side `GEMINI_API_KEY`.
 - Workspace-scoped retrieval with `X-Workspace-ID`.
-- Admin API-key protection for ingestion, delete, eval, history, analytics, and workflow endpoints.
+- Disabled-by-default management endpoints; temporary API-key access is
+  available for local administration until proper authentication is added.
 - Deterministic template generation for offline tests and eval scaffolding.
 - Deterministic hashing embeddings for offline tests and demos.
 - Optional public pretrained embeddings with `BAAI/bge-small-en-v1.5`.
@@ -100,7 +104,44 @@ curl -X POST http://localhost:8000/api/chat \
   }'
 ```
 
-Admin endpoints use `X-Admin-API-Key` when `ADMIN_API_KEY` is set.
+Management endpoints are disabled when `ADMIN_API_KEY` is unset. For local
+maintenance only, set it and send `X-Admin-API-Key` on management requests.
+
+## Interaction Persistence
+
+The default local setup continues to write interaction state to JSONL:
+
+```dotenv
+PERSISTENCE_BACKEND=jsonl
+FEEDBACK_PATH=data/feedback.jsonl
+CHAT_HISTORY_PATH=data/chat_history.jsonl
+```
+
+For a durable hosted implementation, use PostgreSQL or Supabase PostgreSQL:
+
+1. Apply [`migrations/0001_product_interactions.sql`](migrations/0001_product_interactions.sql)
+   in the target database.
+2. Set server-side deployment variables:
+
+```dotenv
+PERSISTENCE_BACKEND=database
+DATABASE_URL=postgresql+psycopg://<user>:<password>@<host>:5432/<database>
+DATABASE_AUTO_CREATE=false
+```
+
+The database path now persists:
+
+- conversations and individual user/assistant messages;
+- answer traces containing answers, citations, confidence and escalation status;
+- feedback linked to a valid answer trace.
+
+`POST /api/chat` now returns a `conversation_id` for future multi-turn
+continuation. Storage for those turns is implemented; injecting prior turns
+into Gemini is deliberately deferred until the next evaluated feature step.
+Authentication and secure workspace membership are also not complete yet:
+the current `X-Workspace-ID` remains a demo boundary, not tenant security.
+`GET /api/health` reports degraded status if configured database tables are not
+reachable, which makes a missed migration visible during deployment validation.
 
 ## Retrieval Benchmark Demo
 
@@ -178,7 +219,7 @@ constraints; it must not be described as full-corpus benchmark performance.
 
 ```text
 app/
-  core/                 Shared config, schemas, and safety helpers
+  core/                 Shared config, schemas, safety and persistence repositories
   ingestion/            Loaders, chunking, quality controls, ingestion service
   retrieval/            Embeddings, lexical search, fusion, vector-store backends
   generation/           RAG agent and LLM providers
@@ -189,6 +230,7 @@ scripts/                Operational helpers such as Qdrant migration
 benchmarks/data/        Downloaded evaluation corpora (ignored by git)
 benchmarks/reports/     Reviewed benchmark artifacts displayed in the demo
 tests/                  Unit tests
+migrations/             PostgreSQL schema migrations for durable product state
 docs/                   Project docs and roadmap
 ```
 
