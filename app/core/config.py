@@ -20,7 +20,7 @@ class Settings:
     │ embeddings         │ EMBEDDING_MODEL, EMBEDDING_PROVIDER, EMBEDDING_DIMENSIONS         │
     │ generation         │ GENERATION_PROVIDER, GENERATION_MODEL                             │
     │ retrieval          │ RETRIEVAL_MODE, candidate counts, RRF weights, reranker selection │
-    │ access boundary    │ ADMIN_API_KEY, DEFAULT_WORKSPACE_ID                               │
+    │ access boundary    │ AUTH_MODE, SUPABASE_URL, DEFAULT_WORKSPACE_ID, ADMIN_API_KEY      │
     │ vector storage     │ VECTOR_STORE, QDRANT_URL, QDRANT_COLLECTION                       │
     │ benchmark output   │ BENCHMARK_REPORT_PATH                                             │
     └────────────────────┴───────────────────────────────────────────────────────────────────┘
@@ -40,6 +40,9 @@ class Settings:
     )
     generation_provider: str = os.getenv("GENERATION_PROVIDER", "gemini")
     generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash")
+    auth_mode: str = os.getenv("AUTH_MODE", "demo")
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
     admin_api_key: str = os.getenv("ADMIN_API_KEY", "")
     enable_gradio_admin: bool = os.getenv("ENABLE_GRADIO_ADMIN", "false").lower() in {
         "1",

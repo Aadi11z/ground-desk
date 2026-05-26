@@ -12,6 +12,7 @@ import gradio as gr
 
 from ..generation.agent import SupportAgent
 from ..generation.workflows import SupportWorkflowService
+from ..core.auth import AccessContext, AccessController, AccessError
 from ..core.config import settings
 from ..core.persistence import analytics_for, create_product_repository
 from ..core.workspace import (
@@ -51,6 +52,7 @@ ingestion_service = IngestionService(settings, embedding_model, vector_store)
 agent = SupportAgent(settings, embedding_model, vector_store)
 workflows = SupportWorkflowService(agent)
 product_repository = create_product_repository(settings)
+access_controller = AccessController(settings, product_repository)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 startup_error: str | None = None
@@ -73,6 +75,33 @@ def _workspace_id(value: str | None) -> str:
         return normalize_workspace_id(value, default=settings.default_workspace_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _normal_access_context(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+) -> AccessContext:
+    try:
+        return access_controller.resolve(
+            authorization=authorization,
+            requested_workspace_id=x_workspace_id,
+        )
+    except AccessError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+def _authenticated_access_context(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+) -> AccessContext:
+    try:
+        return access_controller.resolve(
+            authorization=authorization,
+            requested_workspace_id=x_workspace_id,
+            require_authenticated=True,
+        )
+    except AccessError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 def _ensure_workspace_document(document_id: str, workspace_id: str):
@@ -109,9 +138,15 @@ def health() -> HealthResponse:
     chunks = 0
     health_error = startup_error
     try:
-        documents = len(ingestion_service.list_documents())
-        chunks = vector_store.count_chunks()
+        vector_store.count_chunks()
+        if settings.auth_mode.lower() == "demo":
+            demo_documents = ingestion_service.list_documents(
+                metadata_filter={"workspace_id": settings.default_workspace_id}
+            )
+            documents = len(demo_documents)
+            chunks = sum(document.chunks_indexed for document in demo_documents)
         product_repository.healthcheck()
+        access_controller.healthcheck_configuration()
     except Exception as exc:
         health_error = health_error or str(exc)
     return HealthResponse(
@@ -157,11 +192,10 @@ def benchmark_summary():
 
 @app.get("/api/documents")
 def list_documents(
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(_normal_access_context),
 ):
-    workspace_id = _workspace_id(x_workspace_id)
     return ingestion_service.list_documents(
-        metadata_filter={"workspace_id": workspace_id}
+        metadata_filter={"workspace_id": context.workspace_id}
     )
 
 
@@ -266,14 +300,14 @@ def delete_document(
 @app.post("/api/chat")
 def chat(
     request: ChatRequest,
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(_normal_access_context),
 ):
-    workspace_id = _workspace_id(x_workspace_id)
+    workspace_id = context.workspace_id
     scoped_request = apply_workspace_filter(request, workspace_id)
     try:
         response = agent.answer(scoped_request)
         conversation_id = product_repository.record_answer(
-            workspace_id, scoped_request, response
+            workspace_id, scoped_request, response, user_id=context.user_id
         )
         return response.model_copy(update={"conversation_id": conversation_id})
     except ValueError as exc:
@@ -365,10 +399,12 @@ def changelog_summary(
 @app.post("/api/feedback", response_model=FeedbackResponse)
 def feedback(
     request: FeedbackRequest,
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(_normal_access_context),
 ) -> FeedbackResponse:
     try:
-        product_repository.record_feedback(_workspace_id(x_workspace_id), request)
+        product_repository.record_feedback(
+            context.workspace_id, request, user_id=context.user_id
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FeedbackResponse(accepted=True, trace_id=request.trace_id)
@@ -376,11 +412,24 @@ def feedback(
 
 @app.get("/api/history")
 def history(
-    _: None = Depends(_require_admin),
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(_authenticated_access_context),
 ):
-    workspace_id = _workspace_id(x_workspace_id)
-    return product_repository.list_history(workspace_id)
+    return product_repository.list_history(context.workspace_id, user_id=context.user_id)
+
+
+@app.get("/api/me/workspaces")
+def my_workspaces(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    try:
+        user = access_controller.authenticate(authorization)
+    except AccessError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "workspaces": product_repository.list_user_workspaces(user.user_id),
+    }
 
 
 @app.get("/api/analytics")

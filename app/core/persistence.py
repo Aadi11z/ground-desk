@@ -20,15 +20,30 @@ from .models import ChatRequest, ChatResponse, FeedbackRequest
 class ProductRepository(Protocol):
     def healthcheck(self) -> None: ...
 
+    def auth_healthcheck(self) -> None: ...
+
     def record_answer(
-        self, workspace_id: str, request: ChatRequest, response: ChatResponse
+        self,
+        workspace_id: str,
+        request: ChatRequest,
+        response: ChatResponse,
+        *,
+        user_id: str | None = None,
     ) -> str: ...
 
-    def record_feedback(self, workspace_id: str, request: FeedbackRequest) -> None: ...
+    def record_feedback(
+        self, workspace_id: str, request: FeedbackRequest, *, user_id: str | None = None
+    ) -> None: ...
 
-    def list_history(self, workspace_id: str) -> list[dict]: ...
+    def list_history(
+        self, workspace_id: str, *, user_id: str | None = None
+    ) -> list[dict]: ...
 
     def list_feedback(self, workspace_id: str) -> list[dict]: ...
+
+    def membership_role(self, user_id: str, workspace_id: str) -> str | None: ...
+
+    def list_user_workspaces(self, user_id: str) -> list[dict]: ...
 
 
 class JsonlRepository:
@@ -63,13 +78,22 @@ class JsonlProductRepository:
     def healthcheck(self) -> None:
         return None
 
+    def auth_healthcheck(self) -> None:
+        raise RuntimeError("Authenticated workspaces require database persistence.")
+
     def record_answer(
-        self, workspace_id: str, request: ChatRequest, response: ChatResponse
+        self,
+        workspace_id: str,
+        request: ChatRequest,
+        response: ChatResponse,
+        *,
+        user_id: str | None = None,
     ) -> str:
         conversation_id = request.conversation_id or _id("conv")
         self.history.append(
             {
                 "workspace_id": workspace_id,
+                "user_id": user_id,
                 "conversation_id": conversation_id,
                 "question": request.question,
                 "answer": response.answer,
@@ -84,16 +108,25 @@ class JsonlProductRepository:
         )
         return conversation_id
 
-    def record_feedback(self, workspace_id: str, request: FeedbackRequest) -> None:
+    def record_feedback(
+        self, workspace_id: str, request: FeedbackRequest, *, user_id: str | None = None
+    ) -> None:
         self.feedback.append(
-            {"workspace_id": workspace_id, **request.model_dump(exclude_none=True)}
+            {
+                "workspace_id": workspace_id,
+                "user_id": user_id,
+                **request.model_dump(exclude_none=True),
+            }
         )
 
-    def list_history(self, workspace_id: str) -> list[dict]:
+    def list_history(
+        self, workspace_id: str, *, user_id: str | None = None
+    ) -> list[dict]:
         return [
             item
             for item in self.history.read_all()
             if item.get("workspace_id") == workspace_id
+            and (user_id is None or item.get("user_id") == user_id)
         ]
 
     def list_feedback(self, workspace_id: str) -> list[dict]:
@@ -102,6 +135,12 @@ class JsonlProductRepository:
             for item in self.feedback.read_all()
             if item.get("workspace_id") == workspace_id
         ]
+
+    def membership_role(self, user_id: str, workspace_id: str) -> str | None:
+        return None
+
+    def list_user_workspaces(self, user_id: str) -> list[dict]:
+        return []
 
 
 class DatabaseProductRepository:
@@ -130,6 +169,7 @@ class DatabaseProductRepository:
                 String,
                 Table,
                 Text,
+                Uuid,
                 create_engine,
             )
         except ImportError as exc:
@@ -156,6 +196,7 @@ class DatabaseProductRepository:
                 nullable=False,
                 index=True,
             ),
+            Column("user_id", Uuid(as_uuid=False), nullable=True, index=True),
             Column("created_at", DateTime(timezone=True), nullable=False),
             Column("updated_at", DateTime(timezone=True), nullable=False),
         )
@@ -177,6 +218,7 @@ class DatabaseProductRepository:
                 nullable=False,
                 index=True,
             ),
+            Column("user_id", Uuid(as_uuid=False), nullable=True, index=True),
             Column("role", String(20), nullable=False),
             Column("content", Text, nullable=False),
             Column("trace_id", String(64), nullable=True, index=True),
@@ -193,6 +235,7 @@ class DatabaseProductRepository:
                 nullable=False,
                 index=True,
             ),
+            Column("user_id", Uuid(as_uuid=False), nullable=True, index=True),
             Column(
                 "workspace_id",
                 String(64),
@@ -238,10 +281,24 @@ class DatabaseProductRepository:
                 nullable=False,
                 index=True,
             ),
+            Column("user_id", Uuid(as_uuid=False), nullable=True, index=True),
             Column("rating", Integer, nullable=False),
             Column("feedback_type", String(64), nullable=True),
             Column("comment", Text, nullable=True),
             Column("corrected_answer", Text, nullable=True),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+        )
+        self.workspace_members = Table(
+            "workspace_members",
+            metadata,
+            Column(
+                "workspace_id",
+                String(64),
+                ForeignKey("workspaces.id"),
+                primary_key=True,
+            ),
+            Column("user_id", Uuid(as_uuid=False), primary_key=True),
+            Column("role", String(40), nullable=False),
             Column("created_at", DateTime(timezone=True), nullable=False),
         )
         self.engine = create_engine(database_url, pool_pre_ping=True)
@@ -254,8 +311,19 @@ class DatabaseProductRepository:
         with self.engine.connect() as connection:
             connection.execute(select(self.workspaces.c.id).limit(1)).first()
 
+    def auth_healthcheck(self) -> None:
+        from sqlalchemy import select
+
+        with self.engine.connect() as connection:
+            connection.execute(select(self.workspace_members.c.user_id).limit(1)).first()
+
     def record_answer(
-        self, workspace_id: str, request: ChatRequest, response: ChatResponse
+        self,
+        workspace_id: str,
+        request: ChatRequest,
+        response: ChatResponse,
+        *,
+        user_id: str | None = None,
     ) -> str:
         from sqlalchemy import insert, select, update
 
@@ -277,7 +345,9 @@ class DatabaseProductRepository:
                 )
 
             conversation = connection.execute(
-                select(self.conversations.c.workspace_id).where(
+                select(
+                    self.conversations.c.workspace_id, self.conversations.c.user_id
+                ).where(
                     self.conversations.c.id == conversation_id
                 )
             ).first()
@@ -286,12 +356,15 @@ class DatabaseProductRepository:
                     insert(self.conversations).values(
                         id=conversation_id,
                         workspace_id=workspace_id,
+                        user_id=user_id,
                         created_at=now,
                         updated_at=now,
                     )
                 )
             elif conversation.workspace_id != workspace_id:
                 raise ValueError("Conversation does not belong to this workspace.")
+            elif user_id is not None and str(conversation.user_id) != user_id:
+                raise ValueError("Conversation does not belong to this user.")
             else:
                 connection.execute(
                     update(self.conversations)
@@ -306,6 +379,7 @@ class DatabaseProductRepository:
                         "id": user_message_id,
                         "conversation_id": conversation_id,
                         "workspace_id": workspace_id,
+                        "user_id": user_id,
                         "role": "user",
                         "content": request.question,
                         "trace_id": response.trace_id,
@@ -315,6 +389,7 @@ class DatabaseProductRepository:
                         "id": assistant_message_id,
                         "conversation_id": conversation_id,
                         "workspace_id": workspace_id,
+                        "user_id": user_id,
                         "role": "assistant",
                         "content": response.answer,
                         "trace_id": response.trace_id,
@@ -327,6 +402,7 @@ class DatabaseProductRepository:
                     trace_id=response.trace_id,
                     conversation_id=conversation_id,
                     workspace_id=workspace_id,
+                    user_id=user_id,
                     user_message_id=user_message_id,
                     assistant_message_id=assistant_message_id,
                     question=request.question,
@@ -340,7 +416,9 @@ class DatabaseProductRepository:
             )
         return conversation_id
 
-    def record_feedback(self, workspace_id: str, request: FeedbackRequest) -> None:
+    def record_feedback(
+        self, workspace_id: str, request: FeedbackRequest, *, user_id: str | None = None
+    ) -> None:
         from sqlalchemy import insert, select
 
         with self.engine.begin() as connection:
@@ -348,6 +426,11 @@ class DatabaseProductRepository:
                 select(self.answer_traces.c.trace_id).where(
                     self.answer_traces.c.trace_id == request.trace_id,
                     self.answer_traces.c.workspace_id == workspace_id,
+                    *(
+                        [self.answer_traces.c.user_id == user_id]
+                        if user_id is not None
+                        else []
+                    ),
                 )
             ).first()
             if trace is None:
@@ -357,6 +440,7 @@ class DatabaseProductRepository:
                     id=_id("feedback"),
                     trace_id=request.trace_id,
                     workspace_id=workspace_id,
+                    user_id=user_id,
                     rating=request.rating,
                     feedback_type=request.feedback_type,
                     comment=request.comment,
@@ -365,13 +449,19 @@ class DatabaseProductRepository:
                 )
             )
 
-    def list_history(self, workspace_id: str) -> list[dict]:
+    def list_history(
+        self, workspace_id: str, *, user_id: str | None = None
+    ) -> list[dict]:
         from sqlalchemy import select
 
         with self.engine.connect() as connection:
+            statement = select(self.answer_traces).where(
+                self.answer_traces.c.workspace_id == workspace_id
+            )
+            if user_id is not None:
+                statement = statement.where(self.answer_traces.c.user_id == user_id)
             rows = connection.execute(
-                select(self.answer_traces)
-                .where(self.answer_traces.c.workspace_id == workspace_id)
+                statement
                 .order_by(self.answer_traces.c.created_at.desc())
             ).mappings()
             return [_jsonable(dict(row)) for row in rows]
@@ -386,6 +476,65 @@ class DatabaseProductRepository:
                 .order_by(self.feedback.c.created_at.desc())
             ).mappings()
             return [_jsonable(dict(row)) for row in rows]
+
+    def membership_role(self, user_id: str, workspace_id: str) -> str | None:
+        from sqlalchemy import select
+
+        with self.engine.connect() as connection:
+            row = connection.execute(
+                select(self.workspace_members.c.role).where(
+                    self.workspace_members.c.user_id == user_id,
+                    self.workspace_members.c.workspace_id == workspace_id,
+                )
+            ).first()
+            return str(row.role) if row else None
+
+    def list_user_workspaces(self, user_id: str) -> list[dict]:
+        from sqlalchemy import select
+
+        with self.engine.connect() as connection:
+            rows = connection.execute(
+                select(
+                    self.workspaces.c.id,
+                    self.workspaces.c.name,
+                    self.workspace_members.c.role,
+                )
+                .select_from(
+                    self.workspace_members.join(
+                        self.workspaces,
+                        self.workspace_members.c.workspace_id == self.workspaces.c.id,
+                    )
+                )
+                .where(self.workspace_members.c.user_id == user_id)
+                .order_by(self.workspaces.c.name)
+            ).mappings()
+            return [dict(row) for row in rows]
+
+    def add_workspace_member(
+        self, workspace_id: str, user_id: str, *, role: str = "member"
+    ) -> None:
+        """Test/bootstrap helper; hosted membership management is a later UI feature."""
+        from sqlalchemy import insert, select
+
+        now = _utcnow()
+        with self.engine.begin() as connection:
+            workspace = connection.execute(
+                select(self.workspaces.c.id).where(self.workspaces.c.id == workspace_id)
+            ).first()
+            if workspace is None:
+                connection.execute(
+                    insert(self.workspaces).values(
+                        id=workspace_id, name=workspace_id, created_at=now
+                    )
+                )
+            connection.execute(
+                insert(self.workspace_members).values(
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role=role,
+                    created_at=now,
+                )
+            )
 
 
 def create_product_repository(settings) -> ProductRepository:

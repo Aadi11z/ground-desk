@@ -49,15 +49,18 @@ do not enable it on the public demo before authentication is implemented.
 - BEIR/qrels benchmark runner that reports retrieval Recall, MRR, nDCG, MAP, no-hit rate, and latency on labelled datasets.
 - PostgreSQL-compatible conversation, answer-trace, and feedback persistence,
   with JSONL fallback for zero-setup local demonstrations.
+- Optional Supabase Auth-backed workspace membership enforcement; anonymous
+  portfolio-demo users are confined to the fixed `demo` workspace.
 - Gemini-only generation using the server-side `GEMINI_API_KEY`.
-- Workspace-scoped retrieval with `X-Workspace-ID`.
+- Workspace-scoped retrieval enforced from public-demo scope or authenticated
+  Supabase workspace membership.
 - Disabled-by-default management endpoints; temporary API-key access is
   available for local administration until proper authentication is added.
 - Deterministic template generation for offline tests and eval scaffolding.
 - Deterministic hashing embeddings for offline tests and demos.
 - Optional public pretrained embeddings with `BAAI/bge-small-en-v1.5`.
 - FastAPI backend with OpenAPI docs.
-- Gradio demo mounted at `/demo`.
+- Optional local Gradio management UI mounted at `/demo` only when enabled.
 - Golden-set evaluation endpoint.
 - Dockerfile and GCP Cloud Run deployment guide.
 
@@ -86,6 +89,7 @@ GET    /api/workflows/documents/{document_id}/faq
 GET    /api/workflows/documents/{document_id}/changelog-summary
 POST   /api/feedback
 GET    /api/history
+GET    /api/me/workspaces
 GET    /api/analytics
 GET    /
 GET    /demo
@@ -138,10 +142,64 @@ The database path now persists:
 `POST /api/chat` now returns a `conversation_id` for future multi-turn
 continuation. Storage for those turns is implemented; injecting prior turns
 into Gemini is deliberately deferred until the next evaluated feature step.
-Authentication and secure workspace membership are also not complete yet:
-the current `X-Workspace-ID` remains a demo boundary, not tenant security.
+The default deployed portfolio mode is intentionally anonymous and fixed to
+the `demo` workspace; callers cannot switch to a different workspace through
+`X-Workspace-ID`.
 `GET /api/health` reports degraded status if configured database tables are not
 reachable, which makes a missed migration visible during deployment validation.
+
+## Authentication And Workspaces
+
+There are two normal-user modes:
+
+```dotenv
+# Public portfolio demo: users can access only DEFAULT_WORKSPACE_ID=demo.
+AUTH_MODE=demo
+```
+
+```dotenv
+# Authenticated B2B mode: users must be Supabase workspace members.
+AUTH_MODE=supabase
+PERSISTENCE_BACKEND=database
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY=<publishable-or-anon-client-key>
+DATABASE_URL=postgresql+psycopg://...
+```
+
+To enable authenticated mode:
+
+1. Create a Supabase project and enable the desired sign-in provider.
+2. Apply both migrations in order:
+
+```text
+migrations/0001_product_interactions.sql
+migrations/0002_auth_workspace_membership.sql
+```
+
+3. Insert each organization and authorized user membership in Supabase SQL:
+
+```sql
+insert into workspaces (id, name) values ('acme', 'Acme Support');
+
+insert into workspace_members (workspace_id, user_id, role)
+values ('acme', '<supabase-auth-user-uuid>', 'member');
+```
+
+4. A signed-in client supplies:
+
+```http
+Authorization: Bearer <supabase-access-token>
+X-Workspace-ID: acme
+```
+
+FastAPI validates the token through Supabase Auth, verifies the membership in
+PostgreSQL, and only then applies the workspace filter to retrieval. The new
+`GET /api/me/workspaces` endpoint returns the authenticated user's available
+workspaces for a future frontend selector.
+
+The current HTML frontend does not yet implement Supabase sign-in. Keep
+`AUTH_MODE=demo` on the public UI deployment until the authentication frontend
+commit is added, or test authenticated mode using API requests.
 
 ## Retrieval Benchmark Demo
 

@@ -5,8 +5,13 @@ import pytest
 
 from app.generation.agent import SupportAgent
 from app.generation.workflows import SupportWorkflowService
+from app.core.auth import AccessController, AccessError, AuthenticatedUser
 from app.core.config import Settings
-from app.core.persistence import DatabaseProductRepository, analytics_for
+from app.core.persistence import (
+    DatabaseProductRepository,
+    JsonlProductRepository,
+    analytics_for,
+)
 from app.ingestion.loaders import LoadedDocument
 from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
 from app.retrieval.retriever import HybridRetriever
@@ -870,4 +875,76 @@ def test_database_feedback_rejects_unknown_or_cross_workspace_trace(tmp_path):
         repository.record_feedback(
             "another_workspace",
             FeedbackRequest(trace_id="missing", rating=1),
+        )
+
+
+def test_public_demo_access_is_fixed_to_default_workspace(tmp_path):
+    settings = Settings(
+        auth_mode="demo",
+        default_workspace_id="demo",
+        feedback_path=tmp_path / "feedback.jsonl",
+        chat_history_path=tmp_path / "history.jsonl",
+    )
+    repository = JsonlProductRepository(
+        settings.feedback_path, settings.chat_history_path
+    )
+    controller = AccessController(settings, repository)
+
+    assert (
+        controller.resolve(
+            authorization=None, requested_workspace_id=None
+        ).workspace_id
+        == "demo"
+    )
+    with pytest.raises(AccessError):
+        controller.resolve(authorization=None, requested_workspace_id="acme")
+
+
+def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path):
+    user_id = "11111111-1111-1111-1111-111111111111"
+
+    class FakeVerifier:
+        def verify(self, token: str) -> AuthenticatedUser:
+            assert token == "valid-token"
+            return AuthenticatedUser(user_id=user_id, email="agent@acme.test")
+
+    settings = Settings(
+        auth_mode="supabase",
+        persistence_backend="database",
+        database_url=f"sqlite:///{tmp_path / 'grounddesk.db'}",
+        database_auto_create=True,
+        supabase_url="https://example.supabase.co",
+        supabase_publishable_key="publishable",
+        default_workspace_id="acme",
+    )
+    repository = DatabaseProductRepository(
+        settings.database_url, auto_create=settings.database_auto_create
+    )
+    repository.add_workspace_member("acme", user_id)
+    controller = AccessController(settings, repository, verifier=FakeVerifier())
+
+    controller.healthcheck_configuration()
+    context = controller.resolve(
+        authorization="Bearer valid-token", requested_workspace_id="acme"
+    )
+    repository.record_answer(
+        context.workspace_id,
+        ChatRequest(question="Where are invoices?"),
+        ChatResponse(
+            answer="Under billing.",
+            citations=[],
+            confidence=0.7,
+            needs_escalation=False,
+            trace_id="trace_owned",
+        ),
+        user_id=context.user_id,
+    )
+
+    assert context.user_id == user_id
+    assert context.role == "member"
+    assert len(repository.list_history("acme", user_id=user_id)) == 1
+    assert repository.list_user_workspaces(user_id)[0]["id"] == "acme"
+    with pytest.raises(AccessError):
+        controller.resolve(
+            authorization="Bearer valid-token", requested_workspace_id="globex"
         )
