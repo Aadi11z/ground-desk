@@ -1,5 +1,5 @@
-from .interfaces.ui import build_interface
+import uvicorn
 
 
 if __name__ == "__main__":
-    build_interface().launch(server_name="0.0.0.0", server_port=7860)
+    uvicorn.run("app.interfaces.api:app", host="0.0.0.0", port=8000)

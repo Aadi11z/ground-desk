@@ -12,90 +12,81 @@ def demo_product_html() -> str:
   <title>GroundDesk</title>
   <style>
     :root {
-      --bg: #eef2f7;
-      --bg-2: #f8fafc;
+      --bg: #f3f5f8;
       --panel: #ffffff;
-      --panel-2: #f8fafc;
+      --panel-2: #f7f9fc;
       --ink: #0f172a;
-      --muted: #64748b;
-      --line: #e2e8f0;
+      --muted: #5f6b7a;
+      --line: #dbe2ea;
       --brand: #2563eb;
       --brand-dark: #1d4ed8;
       --green: #067647;
       --amber: #b45309;
       --red: #b42318;
-      --shadow: 0 20px 60px rgba(15, 23, 42, 0.10);
-      --radius: 22px;
+      --radius: 8px;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; letter-spacing: 0; }
     body {
       margin: 0;
       min-height: 100vh;
-      background:
-        radial-gradient(circle at top left, rgba(37,99,235,.14), transparent 34rem),
-        radial-gradient(circle at 80% 0%, rgba(14,165,233,.14), transparent 30rem),
-        linear-gradient(180deg, var(--bg-2), var(--bg));
+      background: var(--bg);
       color: var(--ink);
     }
     a { color: inherit; text-decoration: none; }
     button, textarea, input { font: inherit; }
     button { border: 0; cursor: pointer; }
     .shell {
-      width: min(1400px, calc(100vw - 36px));
-      margin: 22px auto;
+      width: min(1480px, calc(100vw - 32px));
+      margin: 16px auto;
       display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
-      gap: 18px;
+      grid-template-columns: 288px minmax(0, 1fr);
+      gap: 16px;
     }
     .sidebar, .card {
-      background: rgba(255,255,255,.88);
-      border: 1px solid rgba(226,232,240,.95);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
+      background: var(--panel);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
     }
     .sidebar {
-      min-height: calc(100vh - 44px);
-      padding: 18px;
+      max-height: calc(100vh - 32px);
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
       position: sticky;
-      top: 22px;
+      top: 16px;
+      overflow-y: auto;
     }
     .brand { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; }
     .logo {
-      width: 44px; height: 44px; border-radius: 14px;
+      width: 40px; height: 40px; border-radius: 6px;
       display: grid; place-items: center;
-      background: linear-gradient(135deg, #2563eb, #0f172a);
-      color: #fff; font-weight: 900; letter-spacing: -.04em;
-      box-shadow: 0 10px 28px rgba(37,99,235,.25);
+      background: var(--brand);
+      color: #fff; font-weight: 800;
     }
-    .brand-title { font-size: 21px; font-weight: 900; letter-spacing: -.055em; }
+    .brand-title { font-size: 19px; font-weight: 750; }
     .brand-subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
-    .navlinks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .navlinks a, .secondary-btn {
+    .secondary-btn {
       text-align: center;
       border: 1px solid var(--line);
-      border-radius: 13px;
+      border-radius: 6px;
       background: var(--panel-2);
-      padding: 10px;
+      padding: 9px 11px;
       font-size: 13px;
-      font-weight: 750;
+      font-weight: 650;
       color: #334155;
     }
     .hidden { display: none !important; }
     .access-panel, .thread-panel {
-      border: 1px solid var(--line);
-      background: #fff;
-      border-radius: 16px;
+      background: var(--panel-2);
+      border-radius: 6px;
       padding: 12px;
     }
     .access-panel { display: grid; gap: 9px; }
     .access-title { font-weight: 850; font-size: 13px; color: #334155; }
     .access-meta { color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .access-panel input, .access-panel select { padding: 10px 11px; border-radius: 12px; }
+    .access-panel input, .access-panel select { padding: 10px 11px; border-radius: 6px; }
     .access-actions { display: flex; gap: 8px; }
     .access-actions button { flex: 1; }
     select {
@@ -103,14 +94,14 @@ def demo_product_html() -> str:
       border: 1px solid var(--line);
       background: #fff;
       color: var(--ink);
-      border-radius: 12px;
+      border-radius: 6px;
       padding: 10px;
       outline: none;
     }
     .threads { display: grid; gap: 7px; max-height: 258px; overflow-y: auto; margin-top: 9px; }
     .thread {
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 6px;
       background: #fff;
       padding: 9px;
       cursor: pointer;
@@ -123,27 +114,26 @@ def demo_product_html() -> str:
       font-size: 11px;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: .12em;
-      font-weight: 850;
+      font-weight: 700;
     }
     .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
     .status-tile {
       border: 1px solid var(--line);
-      border-radius: 16px;
-      background: #fff;
-      padding: 12px;
+      border-radius: 6px;
+      background: var(--panel-2);
+      padding: 10px;
     }
-    .status-value { font-size: 22px; font-weight: 900; letter-spacing: -.04em; }
+    .status-value { font-size: 22px; font-weight: 700; }
     .status-label { color: var(--muted); font-size: 12px; margin-top: 2px; }
     .pill {
       display: inline-flex; align-items: center; gap: 7px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: 6px;
       padding: 7px 10px;
       color: #475569;
       background: #fff;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
     }
     .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--green); }
     .dot.warn { background: var(--amber); }
@@ -151,105 +141,106 @@ def demo_product_html() -> str:
     .benchmark {
       border: 1px solid #bfdbfe;
       background: #eff6ff;
-      border-radius: 16px;
+      border-radius: 6px;
       padding: 12px;
     }
     .benchmark-name { color: #1e3a8a; font-size: 12px; font-weight: 850; }
-    .benchmark-value { font-size: 26px; font-weight: 950; color: var(--brand-dark); letter-spacing: -.045em; margin-top: 7px; }
+    .benchmark-value { font-size: 25px; font-weight: 700; color: var(--brand-dark); margin-top: 7px; }
     .benchmark-meta { color: #475569; font-size: 12px; line-height: 1.5; margin-top: 5px; }
     .doc {
       border: 1px solid var(--line);
       background: #fff;
-      border-radius: 15px;
+      border-radius: 6px;
       padding: 11px;
     }
-    .doc-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 850; font-size: 13px; }
+    .doc-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 700; font-size: 13px; }
     .doc-meta { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 5px; }
     details { border-top: 1px solid var(--line); padding-top: 14px; }
-    summary { cursor: pointer; font-weight: 850; font-size: 13px; }
+    summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     .upload { display: grid; gap: 9px; margin-top: 12px; }
     input, textarea {
       width: 100%;
       border: 1px solid var(--line);
       background: #fff;
       color: var(--ink);
-      border-radius: 15px;
-      padding: 13px 14px;
+      border-radius: 6px;
+      padding: 11px 12px;
       outline: none;
     }
     input:focus, textarea:focus { border-color: #93c5fd; box-shadow: 0 0 0 4px rgba(37,99,235,.12); }
-    .main { display: flex; flex-direction: column; gap: 18px; }
-    .hero {
-      padding: 28px 30px;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 24px;
-      align-items: end;
+    .main { display: flex; flex-direction: column; gap: 16px; }
+    .workspace-bar {
+      padding: 16px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
     }
-    h1 { margin: 0; font-size: clamp(34px, 4vw, 56px); line-height: .98; letter-spacing: -.075em; max-width: 820px; }
-    .lead { margin: 14px 0 0; color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 760px; }
+    h1 { margin: 0; font-size: 23px; line-height: 1.2; font-weight: 750; }
+    .workspace-type { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .workspace-status { min-width: 0; }
     .stack-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-    .workspace { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: right; }
-    .workbench { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(360px, .7fr); gap: 18px; }
+    .workspace { color: var(--muted); font-size: 12px; margin-top: 8px; text-align: right; }
+    .workbench { display: grid; grid-template-columns: minmax(480px, 1.04fr) minmax(350px, .96fr); gap: 16px; align-items: start; }
     .card-head {
-      padding: 17px 18px;
+      padding: 13px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       border-bottom: 1px solid var(--line);
     }
-    .card-title { font-weight: 900; letter-spacing: -.025em; }
+    .card-title { font-weight: 700; font-size: 15px; }
     .card-subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
-    .card-body { padding: 18px; }
+    .card-body { padding: 16px; }
     .samples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
     .sample {
       text-align: left;
       border: 1px solid var(--line);
       background: #f8fafc;
       color: #334155;
-      border-radius: 14px;
+      border-radius: 6px;
       padding: 10px 11px;
       font-size: 13px;
-      font-weight: 650;
+      font-weight: 500;
     }
     .sample:hover { border-color: #93c5fd; color: var(--brand-dark); background: #eff6ff; }
-    textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+    .field-label { display: block; margin: 0 0 7px; color: #334155; font-size: 13px; font-weight: 650; }
+    textarea { min-height: 106px; resize: vertical; line-height: 1.55; }
     .controls { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
     .checkbox { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
     .checkbox input { width: auto; }
     .primary-btn {
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      background: var(--brand);
       color: #fff;
-      border-radius: 14px;
-      padding: 12px 16px;
-      font-weight: 900;
-      box-shadow: 0 10px 24px rgba(37,99,235,.22);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-weight: 700;
     }
     .primary-btn:hover { filter: brightness(.97); }
     .primary-btn:disabled, .secondary-btn:disabled { opacity: .65; cursor: wait; }
     .answer {
       border: 1px solid var(--line);
-      background: #fff;
-      border-radius: 18px;
-      padding: 17px;
+      background: var(--panel-2);
+      border-radius: 6px;
+      padding: 14px;
       line-height: 1.65;
       min-height: 152px;
       white-space: pre-wrap;
     }
-    .label { margin: 18px 0 8px; color: #334155; font-size: 13px; font-weight: 900; }
+    .label { margin: 18px 0 8px; color: #334155; font-size: 13px; font-weight: 700; }
     .metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
-    .metric { border-radius: 999px; padding: 8px 11px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 800; }
+    .metric { border-radius: 6px; padding: 7px 10px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 650; }
     .metric.good { background: #ecfdf3; color: var(--green); }
     .metric.warn { background: #fffbeb; color: var(--amber); }
     .citation {
       border: 1px solid var(--line);
       background: #fff;
-      border-radius: 16px;
+      border-radius: 6px;
       padding: 13px;
       margin-bottom: 10px;
     }
-    .citation-title { display: flex; justify-content: space-between; gap: 12px; font-weight: 900; font-size: 13px; margin-bottom: 7px; }
+    .citation-title { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; font-size: 13px; margin-bottom: 7px; }
     .snippet, .help, .empty { color: var(--muted); font-size: 13px; line-height: 1.5; }
     .score { color: var(--brand-dark); white-space: nowrap; }
     .feedback {
@@ -264,9 +255,9 @@ def demo_product_html() -> str:
       background: #fff;
       color: #334155;
       padding: 8px 11px;
-      border-radius: 999px;
+      border-radius: 6px;
       font-size: 12px;
-      font-weight: 750;
+      font-weight: 650;
     }
     .feedback button:hover { border-color: #93c5fd; background: #eff6ff; }
     .alert {
@@ -274,7 +265,7 @@ def demo_product_html() -> str:
       border: 1px solid #fed7aa;
       background: #fff7ed;
       color: #9a3412;
-      border-radius: 15px;
+      border-radius: 6px;
       padding: 12px;
       margin-top: 12px;
       font-size: 13px;
@@ -284,21 +275,22 @@ def demo_product_html() -> str:
       border: 1px solid #fed7aa;
       background: #fff7ed;
       color: #9a3412;
-      border-radius: 15px;
+      border-radius: 6px;
       padding: 12px;
       font-size: 13px;
       line-height: 1.45;
     }
     @media (max-width: 1100px) {
       .shell { grid-template-columns: 1fr; }
-      .sidebar { position: static; min-height: auto; }
-      .workbench, .hero { grid-template-columns: 1fr; }
+      .sidebar { position: static; max-height: none; }
+      .workbench { grid-template-columns: 1fr; }
+      .workspace-bar { flex-direction: column; align-items: flex-start; }
       .stack-badges, .workspace { justify-content: flex-start; text-align: left; }
     }
     @media (max-width: 650px) {
       .shell { width: min(100vw - 20px, 1400px); margin: 10px auto; }
       .samples, .status-grid { grid-template-columns: 1fr; }
-      h1 { font-size: 36px; }
+      h1 { font-size: 22px; }
     }
   </style>
 </head>
@@ -311,10 +303,6 @@ def demo_product_html() -> str:
           <div class="brand-title">GroundDesk</div>
           <div class="brand-subtitle">Evidence-grounded support intelligence</div>
         </div>
-      </div>
-
-      <div class="navlinks">
-        <a href="/docs" target="_blank">OpenAPI</a>
       </div>
 
       <div>
@@ -377,12 +365,12 @@ def demo_product_html() -> str:
     </aside>
 
     <main class="main">
-      <section class="card hero">
+      <section class="card workspace-bar">
         <div>
-          <h1>Support answers with receipts.</h1>
-          <p class="lead">Ask a customer-support question. GroundDesk searches Qdrant, generates a Gemini answer constrained to retrieved evidence, returns citations, and flags cases that need escalation.</p>
+          <h1>GroundDesk</h1>
+          <div class="workspace-type">Support workspace</div>
         </div>
-        <div>
+        <div class="workspace-status">
           <div class="stack-badges">
             <span class="pill">Vector DB: Qdrant</span>
             <span class="pill">Generation: Gemini</span>
@@ -395,15 +383,15 @@ def demo_product_html() -> str:
       <section class="workbench">
         <div class="card">
           <div class="card-head">
-            <div><div class="card-title">Support copilot</div><div class="card-subtitle">Grounded answer generation</div></div>
+            <div><div class="card-title">Question and response</div><div class="card-subtitle">Customer support</div></div>
             <button class="primary-btn" id="askBtn">Ask GroundDesk</button>
           </div>
           <div class="card-body">
             <div class="samples" id="samples"></div>
+            <label class="field-label" for="question">Customer question</label>
             <textarea id="question">How long do password reset emails take?</textarea>
             <div class="controls">
               <label class="checkbox"><input id="ticket" type="checkbox" checked> Include suggested support reply</label>
-              <span class="help">If evidence is weak, the response should escalate instead of guessing.</span>
             </div>
 
             <div class="label">Grounded answer</div>
@@ -427,7 +415,7 @@ def demo_product_html() -> str:
 
         <div class="card">
           <div class="card-head">
-            <div><div class="card-title">Evidence</div><div class="card-subtitle">Retrieved source chunks</div></div>
+            <div><div class="card-title">Sources</div><div class="card-subtitle">Citations</div></div>
             <button class="secondary-btn" id="refreshBtn">Refresh</button>
           </div>
           <div class="card-body">

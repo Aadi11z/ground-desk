@@ -8,7 +8,6 @@ import tempfile
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
-import gradio as gr
 
 from ..generation.agent import SupportAgent
 from ..generation.workflows import SupportWorkflowService
@@ -38,7 +37,6 @@ from ..core.models import (
     UrlIngestRequest,
     WorkflowRequest,
 )
-from .ui import build_interface
 from .demo_product import demo_product_html
 from ..retrieval.factory import create_vector_store
 
@@ -497,9 +495,3 @@ def product_demo() -> HTMLResponse:
 @app.get("/app")
 def app_demo() -> HTMLResponse:
     return HTMLResponse(demo_product_html())
-
-
-if settings.enable_gradio_admin:
-    app = gr.mount_gradio_app(
-        app, build_interface(agent, ingestion_service, vector_store), path="/demo"
-    )

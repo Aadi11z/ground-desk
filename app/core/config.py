@@ -69,11 +69,6 @@ class Settings:
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
     admin_api_key: str = os.getenv("ADMIN_API_KEY", "")
-    enable_gradio_admin: bool = os.getenv("ENABLE_GRADIO_ADMIN", "false").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
     default_workspace_id: str = os.getenv("DEFAULT_WORKSPACE_ID", "demo")
     max_context_chunks: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "5"))
     retrieval_mode: str = os.getenv("RETRIEVAL_MODE", "hybrid")

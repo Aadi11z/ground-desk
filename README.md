@@ -28,10 +28,8 @@ http://localhost:8000
 ```
 
 The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
-The normal-user product UI is available at `http://localhost:8000`. A local
-Gradio management UI can be enabled explicitly with `ENABLE_GRADIO_ADMIN=true`;
-do not expose it publicly while knowledge-management authorization remains
-temporary.
+The product UI is available at `http://localhost:8000`; OpenAPI documentation
+is available at `http://localhost:8000/docs`.
 
 ## Core Features
 
@@ -63,7 +61,6 @@ temporary.
 - Deterministic hashing embeddings for offline tests and demos.
 - Optional public pretrained embeddings with `BAAI/bge-small-en-v1.5`.
 - FastAPI backend with OpenAPI docs.
-- Optional local Gradio management UI mounted at `/demo` only when enabled.
 - Golden-set evaluation endpoint.
 - Product-specific labelled support evaluation for citations, escalation and
   follow-up behavior.
@@ -99,7 +96,7 @@ GET    /api/history
 GET    /api/me/workspaces
 GET    /api/analytics
 GET    /
-GET    /demo
+GET    /app
 ```
 
 Example:
@@ -374,7 +371,7 @@ app/
   retrieval/            Embeddings, lexical search, fusion, vector-store backends
   generation/           RAG agent and LLM providers
   evals/                Golden-set and labelled retrieval evaluation
-  interfaces/           FastAPI app and Gradio UI
+  interfaces/           FastAPI API and product interface
 sample_corpus/          Built-in demo support docs
 scripts/                Operational helpers such as Qdrant migration
 benchmarks/data/        Downloaded evaluation corpora (ignored by git)
