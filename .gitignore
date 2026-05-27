@@ -14,7 +14,8 @@ __pycache__/
 /data/
 /results/
 /benchmarks/data/
-
+/scripts/create_demo_deck.py
+/presentation/
 /docs/
 # OS
 .DS_Store
