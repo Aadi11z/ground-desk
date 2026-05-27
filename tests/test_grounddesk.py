@@ -13,6 +13,7 @@ from app.core.persistence import (
     DatabaseProductRepository,
     JsonlProductRepository,
     analytics_for,
+    normalize_database_url,
 )
 from app.ingestion.loaders import LoadedDocument
 from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
@@ -1000,6 +1001,18 @@ def test_database_persistence_records_conversation_traces_and_feedback(tmp_path)
         "assistant",
     ]
     assert messages[-2]["content"] == "Where is that page?"
+
+
+def test_supabase_database_url_uses_installed_psycopg_driver():
+    assert normalize_database_url(
+        "postgresql+psycopg2://postgres:secret@pooler.supabase.com:5432/postgres?sslmode=require"
+    ) == (
+        "postgresql+psycopg://postgres:secret@pooler.supabase.com:5432/postgres?sslmode=require"
+    )
+    assert normalize_database_url(
+        "postgresql://postgres:secret@pooler.supabase.com:5432/postgres"
+    ) == "postgresql+psycopg://postgres:secret@pooler.supabase.com:5432/postgres"
+    assert normalize_database_url("sqlite:///local.db") == "sqlite:///local.db"
 
 
 def test_conversation_context_cannot_be_loaded_across_workspace_or_user(tmp_path):

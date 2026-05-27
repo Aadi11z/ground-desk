@@ -17,6 +17,14 @@ import uuid
 from .models import ChatRequest, ChatResponse, FeedbackRequest
 
 
+def normalize_database_url(database_url: str) -> str:
+    """Route common Supabase PostgreSQL URLs through the installed psycopg v3 driver."""
+    for prefix in ("postgresql+psycopg2://", "postgresql://", "postgres://"):
+        if database_url.startswith(prefix):
+            return "postgresql+psycopg://" + database_url[len(prefix) :]
+    return database_url
+
+
 class ProductRepository(Protocol):
     def healthcheck(self) -> None: ...
 
@@ -192,6 +200,7 @@ class DatabaseProductRepository:
             raise RuntimeError(
                 "DATABASE_URL is required when PERSISTENCE_BACKEND=database."
             )
+        database_url = normalize_database_url(database_url)
         try:
             from sqlalchemy import (
                 JSON,
