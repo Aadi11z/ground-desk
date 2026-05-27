@@ -5,7 +5,7 @@
   │ Citation                   │ Describes retrieved evidence returned with an answer               │
   │ RetrievalFilters           │ Limits retrieval to selected documents, types, titles, or metadata │
   │ ChatRequest                │ Input to the chat endpoint and support agent                       │
-  │ ChatResponse               │ Generated answer, citations, confidence, escalation result         │
+  │ ChatResponse               │ Generated answer, citations, evidence status, escalation result    │
   │ DocumentRecord             │ Full document ingestion/listing representation                     │
   │ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
   │ UrlIngestRequest           │ URL input payload                                                  │
@@ -50,9 +50,13 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    # Backward-compatible numeric evidence-support heuristic. It is not a
+    # calibrated probability that an answer is correct.
     confidence: float = Field(ge=0.0, le=1.0)
+    evidence_status: str = "unassessed"
     needs_escalation: bool
     suggested_ticket_reply: str | None = None
+    generation_model: str | None = None
     trace_id: str
     conversation_id: str | None = None
 

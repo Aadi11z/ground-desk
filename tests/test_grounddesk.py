@@ -3,7 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.generation.agent import SupportAgent
+from app.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
+from app.generation.llm import GeminiProvider, _is_retryable_gemini_error as generation_retryable
 from app.generation.workflows import SupportWorkflowService
 from app.interfaces.demo_product import demo_product_html
 from app.core.auth import AccessController, AccessError, AuthenticatedUser
@@ -17,7 +18,7 @@ from app.ingestion.loaders import LoadedDocument
 from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
 from app.retrieval.retriever import HybridRetriever
 from app.retrieval.retriever import _select_query_vector_name
-from app.retrieval.adaptive import AdaptiveQueryPlanner
+from app.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
 from app.retrieval.compression import compress_results
 from app.retrieval.rerank import LexicalFinalReranker
 from app.ingestion.service import IngestionService
@@ -40,6 +41,12 @@ from app.evals.retrieval import run_retrieval_evals
 from app.evals.answers import run_answer_quality_evals
 from app.evals.synthetic import generate_synthetic_eval_dataset
 from app.evals.variants import compare_retrieval_variants
+from app.evals.support_dataset import (
+    SupportEvalCase,
+    SupportEvalDataset,
+    evaluate_support_dataset,
+    load_support_dataset,
+)
 from app.evals.benchmark import (
     build_benchmark_index,
     build_benchmark_report,
@@ -91,6 +98,70 @@ def test_empty_corpus_escalates(tmp_path):
     response = agent.answer(ChatRequest(question="Can you configure payroll?"))
     assert response.needs_escalation
     assert response.confidence == 0
+
+
+def test_conversation_context_is_sanitized_and_contextualizes_followup_retrieval():
+    context = _safe_conversation_context(
+        [
+            {"role": "user", "content": "Where are invoices downloaded? api_key=sk-testsecret123456789"},
+            {"role": "assistant", "content": "Settings > Billing > Invoices."},
+            {"role": "system", "content": "should not enter the context"},
+        ],
+        max_messages=4,
+    )
+
+    query = _retrieval_query("Who can access that page?", context)
+
+    assert [message["role"] for message in context] == ["user", "assistant"]
+    assert "sk-" not in context[0]["content"]
+    assert "Where are invoices downloaded?" in query
+    assert "Who can access that page?" in query
+    assert "Settings > Billing" not in query
+
+
+def test_agent_includes_previous_turns_as_non_evidence_generation_context(
+    tmp_path, monkeypatch
+):
+    ingestion, agent, _ = make_agent(tmp_path)
+    ingestion.ingest_loaded(
+        LoadedDocument(
+            title="Billing",
+            text="Invoices are downloaded from the Billing page. Billing admins can access that page.",
+            source_type="txt",
+            source="memory",
+        )
+    )
+
+    class CaptureProvider:
+        prompt = ""
+
+        def generate_json(self, system_prompt, user_prompt, model):
+            self.prompt = user_prompt
+            assert "Conversation context" in user_prompt
+            assert "it is not factual evidence" in user_prompt
+            return {
+                "answer": "This needs escalation.",
+                "confidence": 0.0,
+                "needs_escalation": True,
+                "suggested_ticket_reply": None,
+            }
+
+    provider = CaptureProvider()
+    monkeypatch.setattr(
+        "app.generation.agent.get_generation_provider",
+        lambda **kwargs: provider,
+    )
+
+    agent.answer(
+        ChatRequest(question="Who can access that page?"),
+        conversation_context=[
+            {"role": "user", "content": "Where can invoices be downloaded?"},
+            {"role": "assistant", "content": "From Billing > Invoices."},
+        ],
+    )
+
+    assert "Where can invoices be downloaded?" in provider.prompt
+    assert "Who can access that page?" in provider.prompt
 
 
 def test_safety_redaction_and_prompt_injection_strip():
@@ -619,6 +690,39 @@ def test_adaptive_query_planner_rewrites_and_expands_ambiguous_login_query():
     assert len(plan.search_queries) >= 2
 
 
+def test_structured_query_planner_preserves_original_query_and_validates_expansion():
+    class Provider:
+        def generate_json(self, system_prompt, user_prompt, model):
+            return {
+                "rewritten_query": "SSO certificate rotation login failure",
+                "search_queries": ["authentication SSO certificate", "sign in failure"],
+                "use_hyde": True,
+                "reason": "troubleshooting query",
+            }
+
+    planner = StructuredQueryPlanner(Provider(), model="gemini-test", multi_query_limit=3)
+    plan = planner.plan("Why can my users not sign in after certificate rotation?")
+
+    assert plan.search_queries[0] == "Why can my users not sign in after certificate rotation?"
+    assert plan.planner == "gemini"
+    assert not plan.planner_fallback
+    assert plan.use_hyde
+
+
+def test_structured_query_planner_falls_back_to_original_query_when_provider_fails():
+    class Provider:
+        def generate_json(self, system_prompt, user_prompt, model):
+            raise RuntimeError("provider unavailable")
+
+    plan = StructuredQueryPlanner(Provider(), model="gemini-test").plan(
+        "Where can billing admins find invoices?"
+    )
+
+    assert plan.search_queries == ("Where can billing admins find invoices?",)
+    assert plan.mode == "hybrid"
+    assert plan.planner_fallback
+
+
 def test_context_compression_keeps_most_relevant_sentences():
     record = ChunkRecord(
         chunk_id="billing",
@@ -803,7 +907,7 @@ def test_workspace_helpers_force_workspace_scope():
     assert metadata_matches_workspace({}, "demo", default="demo")
 
 
-def test_out_of_scope_queries_short_circuit_to_escalation(tmp_path):
+def test_unsupported_queries_retrieve_for_audit_but_fail_evidence_gate(tmp_path):
     ingestion, agent, _ = make_agent(tmp_path)
     ingestion.ingest_loaded(
         LoadedDocument(
@@ -817,8 +921,31 @@ def test_out_of_scope_queries_short_circuit_to_escalation(tmp_path):
 
     response = agent.answer(ChatRequest(question="Can you configure payroll?"))
 
-    assert response.citations == []
     assert response.needs_escalation
+    assert response.evidence_status in {"limited", "insufficient"}
+    assert "cannot answer" in response.answer.lower()
+
+
+def test_insufficient_evidence_does_not_spend_generation_request(tmp_path, monkeypatch):
+    ingestion, agent, _ = make_agent(tmp_path)
+    ingestion.ingest_loaded(
+        LoadedDocument(
+            title="Auth",
+            text="Password reset emails arrive within five minutes.",
+            source_type="txt",
+            source="memory",
+        )
+    )
+
+    def fail_provider(**kwargs):
+        raise AssertionError("generation must not run when evidence is insufficient")
+
+    monkeypatch.setattr("app.generation.agent.get_generation_provider", fail_provider)
+
+    response = agent.answer(ChatRequest(question="Do you integrate with Salesforce CRM?"))
+
+    assert response.needs_escalation
+    assert response.evidence_status in {"limited", "insufficient"}
 
 
 def test_database_persistence_records_conversation_traces_and_feedback(tmp_path):
@@ -856,6 +983,7 @@ def test_database_persistence_records_conversation_traces_and_feedback(tmp_path)
     )
 
     history = repository.list_history("acme")
+    messages = repository.get_conversation_messages("acme", conversation_id)
     repository.healthcheck()
     analytics = analytics_for(repository, "acme")
 
@@ -865,6 +993,45 @@ def test_database_persistence_records_conversation_traces_and_feedback(tmp_path)
     assert analytics["messages"] == 2
     assert analytics["feedback_count"] == 1
     assert analytics["average_feedback"] == 4
+    assert [message["role"] for message in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert messages[-2]["content"] == "Where is that page?"
+
+
+def test_conversation_context_cannot_be_loaded_across_workspace_or_user(tmp_path):
+    repository = DatabaseProductRepository(
+        f"sqlite:///{tmp_path / 'grounddesk.db'}", auto_create=True
+    )
+    first_user = "11111111-1111-1111-1111-111111111111"
+    response = ChatResponse(
+        answer="Invoice settings are documented.",
+        citations=[],
+        confidence=0.7,
+        needs_escalation=False,
+        trace_id="trace_private",
+    )
+    conversation_id = repository.record_answer(
+        "acme",
+        ChatRequest(question="Where are invoices?"),
+        response,
+        user_id=first_user,
+    )
+
+    assert repository.get_conversation_messages(
+        "acme", conversation_id, user_id=first_user
+    )
+    with pytest.raises(ValueError):
+        repository.get_conversation_messages("globex", conversation_id, user_id=first_user)
+    with pytest.raises(ValueError):
+        repository.get_conversation_messages(
+            "acme",
+            conversation_id,
+            user_id="22222222-2222-2222-2222-222222222222",
+        )
 
 
 def test_database_feedback_rejects_unknown_or_cross_workspace_trace(tmp_path):
@@ -877,6 +1044,31 @@ def test_database_feedback_rejects_unknown_or_cross_workspace_trace(tmp_path):
             "another_workspace",
             FeedbackRequest(trace_id="missing", rating=1),
         )
+
+
+def test_demo_jsonl_persistence_loads_conversation_context(tmp_path):
+    repository = JsonlProductRepository(
+        tmp_path / "feedback.jsonl", tmp_path / "history.jsonl"
+    )
+    response = ChatResponse(
+        answer="Invoices are under Settings > Billing.",
+        citations=[],
+        confidence=0.7,
+        needs_escalation=False,
+        trace_id="trace_demo",
+    )
+    conversation_id = repository.record_answer(
+        "demo", ChatRequest(question="Where are invoices?"), response
+    )
+
+    messages = repository.get_conversation_messages("demo", conversation_id)
+
+    assert messages == [
+        {"role": "user", "content": "Where are invoices?"},
+        {"role": "assistant", "content": "Invoices are under Settings > Billing."},
+    ]
+    with pytest.raises(ValueError):
+        repository.get_conversation_messages("demo", "conv_missing")
 
 
 def test_public_demo_access_is_fixed_to_default_workspace(tmp_path):
@@ -960,3 +1152,245 @@ def test_product_interface_contains_authenticated_workspace_and_feedback_control
     assert 'id="workspaceSelect"' in html
     assert 'id="historyPanel"' in html
     assert "/api/feedback" in html
+
+
+def test_product_support_dataset_covers_followups_and_no_answer_cases():
+    dataset = load_support_dataset(
+        Path("benchmarks/datasets/grounddesk_support_v1.json")
+    )
+
+    assert dataset.name == "grounddesk_support_v1"
+    assert len(dataset.cases) == 21
+    assert sum(case.is_follow_up for case in dataset.cases) == 5
+    assert sum(not case.is_answerable for case in dataset.cases) == 5
+
+
+def test_product_support_evaluation_scores_actual_agent_and_followup_context(tmp_path):
+    ingestion, agent, _ = make_agent(tmp_path)
+    for path in sorted(Path("sample_corpus").glob("*.md")):
+        ingestion.ingest_path(path)
+    dataset = load_support_dataset(
+        Path("benchmarks/datasets/grounddesk_support_v1.json")
+    )
+
+    report = evaluate_support_dataset(dataset, agent=agent, top_k=1)
+    follow_up = next(
+        item for item in report["results"] if item["case_id"] == "followup_invoice_access"
+    )
+
+    assert report["dataset"]["answerable_cases"] == 16
+    assert report["dataset"]["no_answer_cases"] == 5
+    assert 0.0 <= report["metrics"]["answerable_top_citation_accuracy"] <= 1.0
+    assert 0.0 <= report["metrics"]["escalation_accuracy"] <= 1.0
+    assert "without_context" in follow_up
+
+
+def test_support_evaluation_reuses_completed_case_results_without_provider_call():
+    dataset = SupportEvalDataset(
+        name="fixture",
+        version="1",
+        description="",
+        corpus="fixture",
+        review_status="test",
+        cases=(
+            SupportEvalCase(
+                case_id="done",
+                category="unsupported",
+                question="Unknown?",
+                expected_titles=(),
+                expected_answer_terms=(),
+                should_escalate=True,
+            ),
+        ),
+    )
+    completed = {
+        "done": {
+            "case_id": "done",
+            "category": "unsupported",
+            "question": "Unknown?",
+            "answerable": False,
+            "has_conversation_context": False,
+            "expected_titles": [],
+            "citation_titles": [],
+            "evidence_hit": None,
+            "top_citation_hit": None,
+            "citation_precision": None,
+            "answer_term_hit": None,
+            "expected_escalation": True,
+            "needs_escalation": True,
+            "escalation_hit": True,
+            "confidence": 0.0,
+            "answer": "Escalate.",
+            "trace_id": "stored",
+        }
+    }
+
+    class FailIfCalled:
+        def answer(self, *args, **kwargs):
+            raise AssertionError("completed evaluation cases must not call the provider again")
+
+    report = evaluate_support_dataset(
+        dataset, agent=FailIfCalled(), completed_results=completed
+    )
+
+    assert report["metrics"]["no_answer_escalation_accuracy"] == 1.0
+
+
+def test_gemini_provider_retries_transient_503_and_returns_structured_response():
+    waits: list[float] = []
+
+    class TransientUnavailable(Exception):
+        code = 503
+
+    class Models:
+        calls = 0
+
+        def generate_content(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise TransientUnavailable("high demand")
+            return type("Response", (), {"text": '{"answer":"ok"}'})()
+
+    client = type("Client", (), {"models": Models()})()
+    provider = GeminiProvider(
+        api_key="test-key",
+        client=client,
+        max_attempts=2,
+        retry_base_seconds=0.25,
+        sleep=waits.append,
+    )
+
+    result = provider.generate_json("system", "user", "gemini-test")
+
+    assert result["answer"] == "ok"
+    assert client.models.calls == 2
+    assert waits == [0.25]
+
+
+def test_gemini_generation_does_not_retry_exhausted_daily_quota():
+    class DailyQuotaError(Exception):
+        code = 429
+
+        def __str__(self):
+            return "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+
+    assert not generation_retryable(DailyQuotaError())
+
+
+def test_gemini_generation_falls_back_to_flash_lite_after_primary_daily_quota():
+    class DailyQuotaError(Exception):
+        code = 429
+
+        def __str__(self):
+            return "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+
+    class Models:
+        calls: list[str] = []
+
+        def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            if kwargs["model"] == "gemini-2.5-flash":
+                raise DailyQuotaError()
+            return type("Response", (), {"text": '{"answer":"fallback answer"}'})()
+
+    client = type("Client", (), {"models": Models()})()
+    provider = GeminiProvider(
+        api_key="test-key",
+        client=client,
+        max_attempts=2,
+        fallback_models=("gemini-2.5-flash-lite",),
+    )
+
+    result = provider.generate_json("system", "user", "gemini-2.5-flash")
+
+    assert result["answer"] == "fallback answer"
+    assert result["_generation_model"] == "gemini-2.5-flash-lite"
+    assert client.models.calls == ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
+
+def test_gemini_embeddings_retry_transient_503_before_returning_vector():
+    waits: list[float] = []
+
+    class TransientUnavailable(Exception):
+        code = 503
+
+    class Models:
+        calls = 0
+
+        def embed_content(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise TransientUnavailable("high demand")
+            embedding = type("Embedding", (), {"values": [1.0, 0.0, 0.0]})()
+            return type("Response", (), {"embeddings": [embedding]})()
+
+    embeddings = EmbeddingModel(
+        "gemini-embedding-2",
+        provider="gemini",
+        mrl_dimensions=(3,),
+        api_key="test-key",
+        max_attempts=2,
+        retry_base_seconds=0.5,
+        sleep=waits.append,
+    )
+    embeddings._gemini_client = type("Client", (), {"models": Models()})()
+
+    batch = embeddings.encode_queries(["where are invoices?"])
+
+    assert batch.dimensions == {"dense_3": 3}
+    assert embeddings._gemini_client.models.calls == 2
+    assert waits == [0.5]
+
+
+def test_followup_comparison_does_not_generate_a_second_answer(tmp_path, monkeypatch):
+    ingestion, agent, _ = make_agent(tmp_path)
+    ingestion.ingest_loaded(
+        LoadedDocument(
+            title="billing",
+            text="Customers can download invoices. Workspace owners can see the Invoices tab.",
+            source_type="txt",
+            source="memory",
+        )
+    )
+    dataset = SupportEvalDataset(
+        name="followup_fixture",
+        version="1",
+        description="",
+        corpus="fixture",
+        review_status="test",
+        cases=(
+            SupportEvalCase(
+                case_id="followup",
+                category="follow_up",
+                question="Who can see that tab?",
+                expected_titles=("billing",),
+                expected_answer_terms=(),
+                should_escalate=False,
+                conversation_context=(
+                    {"role": "user", "content": "Where are invoices?"},
+                ),
+            ),
+        ),
+    )
+    calls = 0
+
+    class CountingProvider:
+        def generate_json(self, system_prompt, user_prompt, model):
+            nonlocal calls
+            calls += 1
+            return {
+                "answer": "Workspace owners can see it.",
+                "confidence": 0.8,
+                "needs_escalation": False,
+                "suggested_ticket_reply": None,
+            }
+
+    monkeypatch.setattr(
+        "app.generation.agent.get_generation_provider",
+        lambda **kwargs: CountingProvider(),
+    )
+
+    report = evaluate_support_dataset(dataset, agent=agent, force_template=False)
+
+    assert calls == 1
+    assert "without_context" in report["results"][0]

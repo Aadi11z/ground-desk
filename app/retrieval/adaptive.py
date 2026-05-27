@@ -1,9 +1,16 @@
-"""Adaptive retrieval planning and lightweight query expansion."""
+"""Retrieval planning.
+
+The deterministic planner remains an offline baseline. The structured planner
+is an opt-in production path: it asks a model for search formulations, validates
+the response, always retains the original query, and falls back to a plain
+hybrid search on any provider or validation failure.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from typing import Protocol
 
 
 EXACT_TOKEN_PATTERN = re.compile(
@@ -28,10 +35,13 @@ class RetrievalPlan:
     search_queries: tuple[str, ...]
     use_hyde: bool
     analysis: QueryAnalysis
+    planner: str = "static"
+    planner_reason: str | None = None
+    planner_fallback: bool = False
 
 
 class AdaptiveQueryPlanner:
-    """Deterministic baseline planner that can later be replaced by an LLM router."""
+    """Deterministic rules baseline retained for offline comparison."""
 
     def __init__(self, *, multi_query_limit: int = 3):
         self.multi_query_limit = multi_query_limit
@@ -102,6 +112,8 @@ class AdaptiveQueryPlanner:
             search_queries=search_queries,
             use_hyde=analysis.ambiguous or analysis.troubleshooting,
             analysis=analysis,
+            planner="rules",
+            planner_reason="legacy_rule_expansion",
         )
 
     def rewrite(self, query: str, analysis: QueryAnalysis) -> str:
@@ -142,4 +154,104 @@ class AdaptiveQueryPlanner:
         return (
             "A support article explaining the issue, likely cause, and resolution for: "
             f"{rewritten_query}"
+        )
+
+
+class StructuredPlannerProvider(Protocol):
+    def generate_json(
+        self, system_prompt: str, user_prompt: str, model: str | None
+    ) -> dict: ...
+
+
+PLANNER_SYSTEM_PROMPT = """You plan retrieval for a support knowledge base.
+Return valid JSON only with these keys:
+- rewritten_query: one concise standalone search query preserving the user's intent
+- search_queries: up to three alternative searches, including useful product terms
+- use_hyde: boolean; use only when a hypothetical support answer is likely to
+  improve semantic retrieval for vague troubleshooting language
+- reason: a short routing reason
+Do not answer the customer question. Do not classify it as unsupported. The
+retrieval system must search before deciding whether evidence exists."""
+
+
+class StructuredQueryPlanner:
+    """Model-backed planner with recall-preserving validation and fallback."""
+
+    def __init__(
+        self,
+        provider: StructuredPlannerProvider,
+        *,
+        model: str,
+        multi_query_limit: int = 3,
+    ):
+        self.provider = provider
+        self.model = model
+        self.multi_query_limit = max(1, multi_query_limit)
+        self.analysis_planner = AdaptiveQueryPlanner(
+            multi_query_limit=self.multi_query_limit
+        )
+
+    def plan(self, query: str) -> RetrievalPlan:
+        original = query.strip()
+        try:
+            payload = self.provider.generate_json(
+                PLANNER_SYSTEM_PROMPT,
+                f"Customer question:\n{original}",
+                model=self.model,
+            )
+            return self._validated_plan(original, payload)
+        except Exception:
+            return self.fallback_plan(original, reason="planner_unavailable_or_invalid")
+
+    def fallback_plan(self, query: str, *, reason: str) -> RetrievalPlan:
+        return RetrievalPlan(
+            mode="hybrid",
+            rewritten_query=query,
+            search_queries=(query,),
+            use_hyde=False,
+            analysis=self._analysis_without_rejection(query),
+            planner="gemini",
+            planner_reason=reason,
+            planner_fallback=True,
+        )
+
+    def hyde_query(self, rewritten_query: str) -> str:
+        return self.analysis_planner.hyde_query(rewritten_query)
+
+    def _validated_plan(self, query: str, payload: dict) -> RetrievalPlan:
+        rewritten = str(payload.get("rewritten_query", "")).strip()
+        if not rewritten or len(rewritten) > 500:
+            raise ValueError("Planner returned an invalid rewritten query.")
+        raw_queries = payload.get("search_queries", [])
+        if not isinstance(raw_queries, list):
+            raise ValueError("Planner search_queries must be a list.")
+        candidates = [query, rewritten]
+        candidates.extend(
+            str(value).strip()
+            for value in raw_queries
+            if str(value).strip() and len(str(value).strip()) <= 500
+        )
+        search_queries = tuple(dict.fromkeys(candidates))[: self.multi_query_limit]
+        if not search_queries:
+            raise ValueError("Planner returned no usable search queries.")
+        return RetrievalPlan(
+            mode="hybrid",
+            rewritten_query=rewritten,
+            search_queries=search_queries,
+            use_hyde=bool(payload.get("use_hyde", False)),
+            analysis=self._analysis_without_rejection(query),
+            planner="gemini",
+            planner_reason=str(payload.get("reason", "structured_rewrite"))[:120],
+        )
+
+    def _analysis_without_rejection(self, query: str) -> QueryAnalysis:
+        analysis = self.analysis_planner.analyze(query)
+        # The planner can propose searches, but it cannot refuse to search.
+        return QueryAnalysis(
+            semantic_faq=analysis.semantic_faq,
+            exact_token_heavy=analysis.exact_token_heavy,
+            ambiguous=analysis.ambiguous,
+            troubleshooting=analysis.troubleshooting,
+            multimodal=analysis.multimodal,
+            out_of_scope=False,
         )

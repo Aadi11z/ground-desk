@@ -1,0 +1,227 @@
+{
+  "name": "grounddesk_support_v1",
+  "version": "1.0",
+  "description": "Product-specific evaluation cases for the bundled GroundDesk support corpus. This set tests evidence selection, answer coverage, escalation behavior, and follow-up context.",
+  "corpus": "sample_corpus",
+  "review_status": "engineer-authored baseline; manually review before presenting results as release quality",
+  "cases": [
+    {
+      "id": "auth_reset_delivery",
+      "category": "answerable",
+      "question": "How long do password reset emails normally take to arrive?",
+      "expected_titles": ["authentication"],
+      "expected_answer_terms": ["five minutes"],
+      "should_escalate": false
+    },
+    {
+      "id": "auth_reset_escalation",
+      "category": "answerable",
+      "question": "When should support escalate a password reset email that never arrived?",
+      "expected_titles": ["authentication"],
+      "expected_answer_terms": ["ten minutes", "escalate"],
+      "should_escalate": false
+    },
+    {
+      "id": "auth_sso_checks",
+      "category": "answerable",
+      "question": "What should I verify when SSO users cannot sign in?",
+      "expected_titles": ["authentication"],
+      "expected_answer_terms": ["metadata", "certificate"],
+      "should_escalate": false
+    },
+    {
+      "id": "billing_invoice_location",
+      "category": "answerable",
+      "question": "Where can a customer download their invoice?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["settings", "billing", "invoices"],
+      "should_escalate": false
+    },
+    {
+      "id": "billing_invoice_permissions",
+      "category": "answerable",
+      "question": "Which roles can see the Invoices tab?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["workspace owner", "billing admin"],
+      "should_escalate": false
+    },
+    {
+      "id": "billing_annual_refund",
+      "category": "answerable",
+      "question": "Is an annual plan refundable after purchase?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["14 days", "fair-use"],
+      "should_escalate": false
+    },
+    {
+      "id": "billing_monthly_proration",
+      "category": "answerable",
+      "question": "Are monthly plans prorated after the renewal date?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["not prorated"],
+      "should_escalate": false
+    },
+    {
+      "id": "usage_invite_teammates",
+      "category": "answerable",
+      "question": "Where can a workspace owner invite teammates?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["settings", "members"],
+      "should_escalate": false
+    },
+    {
+      "id": "usage_invite_expiry",
+      "category": "answerable",
+      "question": "How long does an invitation remain valid?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["seven days"],
+      "should_escalate": false
+    },
+    {
+      "id": "usage_csv_roles",
+      "category": "answerable",
+      "question": "Which users can export CSV reports?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["analyst", "admin", "owner"],
+      "should_escalate": false
+    },
+    {
+      "id": "usage_large_exports",
+      "category": "answerable",
+      "question": "How are large CSV exports delivered?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["email"],
+      "should_escalate": false
+    },
+    {
+      "id": "followup_invoice_access",
+      "category": "follow_up",
+      "conversation_context": [
+        {
+          "role": "user",
+          "content": "Where can customers download invoices?"
+        },
+        {
+          "role": "assistant",
+          "content": "Invoices are available under Settings > Billing > Invoices."
+        }
+      ],
+      "question": "Who is allowed to see that tab?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["workspace owner", "billing admin"],
+      "should_escalate": false
+    },
+    {
+      "id": "followup_refund_monthly",
+      "category": "follow_up",
+      "conversation_context": [
+        {
+          "role": "user",
+          "content": "Can an annual plan be refunded?"
+        },
+        {
+          "role": "assistant",
+          "content": "Annual plans may qualify for refunds within 14 days."
+        }
+      ],
+      "question": "What about monthly plans after renewal?",
+      "expected_titles": ["billing"],
+      "expected_answer_terms": ["not prorated"],
+      "should_escalate": false
+    },
+    {
+      "id": "followup_reset_escalation",
+      "category": "follow_up",
+      "conversation_context": [
+        {
+          "role": "user",
+          "content": "My password reset email is missing."
+        },
+        {
+          "role": "assistant",
+          "content": "Password reset emails usually arrive within five minutes."
+        }
+      ],
+      "question": "When should I escalate this?",
+      "expected_titles": ["authentication"],
+      "expected_answer_terms": ["ten minutes", "escalate"],
+      "should_escalate": false
+    },
+    {
+      "id": "followup_invite_expired",
+      "category": "follow_up",
+      "conversation_context": [
+        {
+          "role": "user",
+          "content": "How do I invite a teammate?"
+        },
+        {
+          "role": "assistant",
+          "content": "Workspace owners can send invitations."
+        }
+      ],
+      "question": "What can I do if the link expires?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["resend", "pending invitations"],
+      "should_escalate": false
+    },
+    {
+      "id": "followup_large_export_delivery",
+      "category": "follow_up",
+      "conversation_context": [
+        {
+          "role": "user",
+          "content": "Can I make a CSV export from reports?"
+        },
+        {
+          "role": "assistant",
+          "content": "CSV exports are available on the Reports page."
+        }
+      ],
+      "question": "How do large ones arrive?",
+      "expected_titles": ["product_usage"],
+      "expected_answer_terms": ["email"],
+      "should_escalate": false
+    },
+    {
+      "id": "unsupported_payroll",
+      "category": "unsupported",
+      "question": "Can you configure my payroll software?",
+      "expected_titles": [],
+      "expected_answer_terms": [],
+      "should_escalate": true
+    },
+    {
+      "id": "unsupported_crm_integration",
+      "category": "unsupported",
+      "question": "How do I integrate my account with Salesforce?",
+      "expected_titles": [],
+      "expected_answer_terms": [],
+      "should_escalate": true
+    },
+    {
+      "id": "unsupported_account_deletion",
+      "category": "unsupported",
+      "question": "How can I permanently delete my account and all retained data?",
+      "expected_titles": [],
+      "expected_answer_terms": [],
+      "should_escalate": true
+    },
+    {
+      "id": "unsupported_api_rate_limit",
+      "category": "unsupported",
+      "question": "What is the API rate limit for webhook delivery?",
+      "expected_titles": [],
+      "expected_answer_terms": [],
+      "should_escalate": true
+    },
+    {
+      "id": "ambiguous_export",
+      "category": "ambiguous",
+      "question": "Can I export it?",
+      "expected_titles": [],
+      "expected_answer_terms": [],
+      "should_escalate": true
+    }
+  ]
+}

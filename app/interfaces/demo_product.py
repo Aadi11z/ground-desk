@@ -409,7 +409,7 @@ def demo_product_html() -> str:
             <div class="label">Grounded answer</div>
             <div class="answer" id="answer">Ready for a support question.</div>
             <div class="metrics">
-              <span class="metric" id="confidence">Confidence: —</span>
+              <span class="metric" id="confidence">Evidence support: —</span>
               <span class="metric" id="escalation">Escalation: —</span>
               <span class="metric" id="trace">Trace: —</span>
             </div>
@@ -679,7 +679,7 @@ def demo_product_html() -> str:
         el("history").innerHTML = latestThreads.map(item => `
           <div class="thread ${item.conversation_id === state.conversationId ? "active" : ""}" data-conversation="${escapeHtml(item.conversation_id)}">
             <div class="thread-question">${escapeHtml(item.question || "Question")}</div>
-            <div class="thread-meta">${item.needs_escalation ? "Escalated" : "Answered"} · confidence ${Math.round(Number(item.confidence || 0) * 100)}%</div>
+            <div class="thread-meta">${item.needs_escalation ? "Escalated for review" : "Grounded answer returned"}</div>
           </div>`).join("");
         document.querySelectorAll(".thread").forEach(node => node.addEventListener("click", () => selectThread(node.dataset.conversation)));
       } catch (err) {
@@ -780,9 +780,16 @@ def demo_product_html() -> str:
 
     function renderResponse(data) {
       el("answer").textContent = cleanAnswer(data.answer || "No answer returned.");
-      const confidence = Math.round((data.confidence || 0) * 100);
-      el("confidence").textContent = `Confidence: ${confidence}%`;
-      el("confidence").className = `metric ${confidence >= 60 ? "good" : "warn"}`;
+      const evidenceLabels = {
+        supported: "supported",
+        limited: "limited",
+        insufficient: "not found",
+        clarification_needed: "needs clarification",
+        unassessed: "unassessed"
+      };
+      const evidenceStatus = data.evidence_status || (data.needs_escalation ? "limited" : "supported");
+      el("confidence").textContent = `Evidence support: ${evidenceLabels[evidenceStatus] || evidenceStatus}`;
+      el("confidence").className = `metric ${evidenceStatus === "supported" && !data.needs_escalation ? "good" : "warn"}`;
       el("escalation").textContent = `Escalation: ${data.needs_escalation ? "yes" : "no"}`;
       el("escalation").className = `metric ${data.needs_escalation ? "warn" : "good"}`;
       el("trace").textContent = `Trace: ${data.trace_id || "—"}`;
@@ -791,7 +798,7 @@ def demo_product_html() -> str:
       setText("feedbackStatus", "");
       if (data.citations && data.citations.length) {
         el("citations").className = "";
-        el("citations").innerHTML = data.citations.map((c, i) => `<div class="citation"><div class="citation-title"><span>[${i + 1}] ${escapeHtml(c.title)}</span><span class="score">score ${Number(c.score || 0).toFixed(2)}</span></div><div class="snippet">${escapeHtml(c.snippet || "")}</div></div>`).join("");
+        el("citations").innerHTML = data.citations.map((c, i) => `<div class="citation"><div class="citation-title"><span>[${i + 1}] ${escapeHtml(c.title)}</span><span class="score">rank score ${Number(c.score || 0).toFixed(2)}</span></div><div class="snippet">${escapeHtml(c.snippet || "")}</div></div>`).join("");
       } else {
         el("citations").className = "empty";
         el("citations").textContent = "No citations returned. GroundDesk should escalate this instead of inventing an answer.";
@@ -803,7 +810,7 @@ def demo_product_html() -> str:
       el("citations").className = "empty";
       el("citations").textContent = "Citations appear after generation.";
       el("ticketReply").textContent = "A paste-ready reply appears here when enabled.";
-      setText("confidence", "Confidence: —");
+      setText("confidence", "Evidence support: —");
       setText("escalation", "Escalation: —");
       setText("trace", "Trace: —");
       el("feedbackPanel").classList.add("hidden");

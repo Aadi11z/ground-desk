@@ -49,11 +49,17 @@ class EmbeddingModel:
         mrl_dimensions: tuple[int, ...] | None = None,
         api_key: str | None = None,
         request_delay_seconds: float = 0.0,
+        max_attempts: int = 4,
+        retry_base_seconds: float = 2.0,
+        sleep=time.sleep,
     ):
         self.model_name = model_name
         self.provider = provider.lower()
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.request_delay_seconds = max(0.0, request_delay_seconds)
+        self.max_attempts = max(1, max_attempts)
+        self.retry_base_seconds = max(0.0, retry_base_seconds)
+        self.sleep = sleep
         requested_dimensions = tuple(sorted(mrl_dimensions or (768, 1536, 3072)))
         self.backend = "hashing"
         self._model = None
@@ -173,15 +179,26 @@ class EmbeddingModel:
                 config_kwargs["task_type"] = task_type
                 if task_type == "RETRIEVAL_DOCUMENT" and title:
                     config_kwargs["title"] = title
-            result = self._gemini_client.models.embed_content(
-                model=self.model_name,
-                contents=content,
-                config=types.EmbedContentConfig(**config_kwargs),
-            )
+            for attempt in range(1, self.max_attempts + 1):
+                try:
+                    result = self._gemini_client.models.embed_content(
+                        model=self.model_name,
+                        contents=content,
+                        config=types.EmbedContentConfig(**config_kwargs),
+                    )
+                    break
+                except Exception as exc:
+                    if (
+                        not _is_retryable_gemini_error(exc)
+                        or attempt >= self.max_attempts
+                    ):
+                        raise
+                    fallback_delay = self.retry_base_seconds * (2 ** (attempt - 1))
+                    self.sleep(_retry_delay_seconds(exc, fallback=fallback_delay))
             embedding = result.embeddings[0]
             vectors.append(np.asarray(embedding.values, dtype=np.float32))
             if self.request_delay_seconds:
-                time.sleep(self.request_delay_seconds)
+                self.sleep(self.request_delay_seconds)
         return _normalize_rows(np.vstack(vectors))
 
     def _uses_embedding_2(self) -> bool:
@@ -238,3 +255,21 @@ def _format_embedding_2_content(
     if task_type == "RETRIEVAL_QUERY":
         return f"task: question answering | query: {text}"
     return text
+
+
+def _is_retryable_gemini_error(exc: Exception) -> bool:
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if code not in {429, 500, 502, 503, 504}:
+        return False
+    return "RequestsPerDayPerProjectPerModel" not in str(exc)
+
+
+def _retry_delay_seconds(exc: Exception, *, fallback: float) -> float:
+    message = str(getattr(exc, "message", "") or exc)
+    match = re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", message, re.I)
+    if match:
+        return max(fallback, float(match.group(1)) + 1.0)
+    match = re.search(r"retryDelay['\" ]*:\s*['\"]?([0-9]+)s", message, re.I)
+    if match:
+        return max(fallback, float(match.group(1)) + 1.0)
+    return fallback

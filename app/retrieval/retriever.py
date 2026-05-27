@@ -8,7 +8,7 @@ from typing import Literal
 import numpy as np
 
 from ..core.config import Settings
-from .adaptive import AdaptiveQueryPlanner, RetrievalPlan
+from .adaptive import AdaptiveQueryPlanner, RetrievalPlan, StructuredQueryPlanner
 from .compression import compress_results
 from .lexical import BM25Index
 from .rerank import create_final_reranker
@@ -27,6 +27,9 @@ class RetrievalDiagnostics:
     query_count: int = 1
     used_hyde: bool = False
     rewritten_query: str | None = None
+    planner: str = "static"
+    planner_reason: str | None = None
+    planner_fallback: bool = False
 
 
 class HybridRetriever:
@@ -41,9 +44,25 @@ class HybridRetriever:
         self.store = store
         self.embeddings = embeddings
         self.lexical_index = BM25Index()
-        self.planner = AdaptiveQueryPlanner(
+        self.rules_planner = AdaptiveQueryPlanner(
             multi_query_limit=settings.multi_query_limit
         )
+        self.planner = self.rules_planner
+        if (
+            settings.retrieval_mode.lower() == "planned"
+            and settings.query_planner_provider.lower() == "gemini"
+        ):
+            from ..generation.llm import get_generation_provider
+
+            self.planner = StructuredQueryPlanner(
+                get_generation_provider(
+                    max_attempts=settings.gemini_generation_max_attempts,
+                    retry_base_seconds=settings.gemini_generation_retry_base_seconds,
+                    request_delay_seconds=settings.gemini_generation_request_delay_seconds,
+                ),
+                model=settings.query_planner_model,
+                multi_query_limit=settings.multi_query_limit,
+            )
         self.final_reranker = create_final_reranker(
             settings.final_reranker,
             cross_encoder_model=settings.cross_encoder_model,
@@ -70,28 +89,20 @@ class HybridRetriever:
             query_embeddings=query_embeddings,
             query_embedding=query_embedding,
         )
-        plan = (
-            self.planner.plan(query)
-            if self.settings.adaptive_retrieval_enabled
-            and self.settings.retrieval_mode.lower() == "adaptive"
-            else self._static_plan(query)
-        )
+        configured_mode = self.settings.retrieval_mode.lower()
+        if configured_mode == "planned" and isinstance(
+            self.planner, StructuredQueryPlanner
+        ):
+            plan = self.planner.plan(query)
+        elif self.settings.adaptive_retrieval_enabled and configured_mode == "adaptive":
+            plan = self.rules_planner.plan(query)
+        else:
+            plan = self._static_plan(query)
         mode = self._mode(plan.mode)
         coarse_vector_name = _select_query_vector_name(
             query_embeddings,
             preferred=getattr(self.store, "default_vector_name", None),
         )
-        if plan.analysis.out_of_scope:
-            self.last_diagnostics = RetrievalDiagnostics(
-                mode=mode,
-                dense_candidates=0,
-                sparse_candidates=0,
-                reranked_candidates=0,
-                query_count=len(plan.search_queries),
-                used_hyde=False,
-                rewritten_query=plan.rewritten_query,
-            )
-            return []
         dense_results = []
         sparse_results = []
         for search_query in plan.search_queries:
@@ -140,6 +151,9 @@ class HybridRetriever:
             query_count=len(plan.search_queries),
             used_hyde=plan.use_hyde,
             rewritten_query=plan.rewritten_query,
+            planner=plan.planner,
+            planner_reason=plan.planner_reason,
+            planner_fallback=plan.planner_fallback,
         )
 
         if mode == "dense":
@@ -220,25 +234,27 @@ class HybridRetriever:
 
     def _mode(self, override: str | None = None) -> RetrievalMode:
         mode = (override or self.settings.retrieval_mode).lower()
-        if mode == "adaptive":
+        if mode in {"adaptive", "planned"}:
             mode = "hybrid"
         if mode not in {"dense", "sparse", "hybrid"}:
             raise ValueError(
                 f"Unsupported retrieval mode: {self.settings.retrieval_mode}. "
-                "Use adaptive, dense, sparse, or hybrid."
+                "Use planned, adaptive, dense, sparse, or hybrid."
             )
         return mode
 
     def _static_plan(self, query: str) -> RetrievalPlan:
-        analysis = self.planner.analyze(query)
+        analysis = self.rules_planner.analyze(query)
         return RetrievalPlan(
             mode="hybrid"
-            if self.settings.retrieval_mode.lower() == "adaptive"
+            if self.settings.retrieval_mode.lower() in {"adaptive", "planned"}
             else self.settings.retrieval_mode,
             rewritten_query=query,
             search_queries=(query,),
             use_hyde=False,
             analysis=analysis,
+            planner="static",
+            planner_reason="original_query",
         )
 
     def _rerank_if_possible(
@@ -286,6 +302,9 @@ class HybridRetriever:
             query_count=self.last_diagnostics.query_count,
             used_hyde=self.last_diagnostics.used_hyde,
             rewritten_query=self.last_diagnostics.rewritten_query,
+            planner=self.last_diagnostics.planner,
+            planner_reason=self.last_diagnostics.planner_reason,
+            planner_fallback=self.last_diagnostics.planner_fallback,
         )
         return rescored[:top_k]
 

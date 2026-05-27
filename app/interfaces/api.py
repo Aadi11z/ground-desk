@@ -26,6 +26,7 @@ from ..evals.golden_set import run_evals
 from ..evals.retrieval import run_retrieval_evals
 from ..evals.synthetic import generate_synthetic_eval_dataset
 from ..evals.variants import compare_retrieval_variants
+from ..evals.support_dataset import evaluate_support_dataset, load_support_dataset
 from ..ingestion.service import IngestionService
 from ..core.models import (
     ChatRequest,
@@ -46,6 +47,8 @@ embedding_model = EmbeddingModel(
     settings.embedding_model,
     provider=settings.embedding_provider,
     mrl_dimensions=settings.embedding_dimensions,
+    max_attempts=settings.gemini_embedding_max_attempts,
+    retry_base_seconds=settings.gemini_embedding_retry_base_seconds,
 )
 vector_store = create_vector_store(settings)
 ingestion_service = IngestionService(settings, embedding_model, vector_store)
@@ -321,7 +324,19 @@ def chat(
     workspace_id = context.workspace_id
     scoped_request = apply_workspace_filter(request, workspace_id)
     try:
-        response = agent.answer(scoped_request)
+        conversation_context = (
+            product_repository.get_conversation_messages(
+                workspace_id,
+                scoped_request.conversation_id,
+                user_id=context.user_id,
+                limit=max(1, settings.conversation_context_turns * 2),
+            )
+            if scoped_request.conversation_id
+            else []
+        )
+        response = agent.answer(
+            scoped_request, conversation_context=conversation_context
+        )
         conversation_id = product_repository.record_answer(
             workspace_id, scoped_request, response, user_id=context.user_id
         )
@@ -355,6 +370,15 @@ def synthetic_evals(_: None = Depends(_require_admin)):
 @app.post("/api/evals/variants")
 def retrieval_variant_evals(_: None = Depends(_require_admin)):
     return compare_retrieval_variants(agent)
+
+
+@app.post("/api/evals/support")
+def support_product_evals(_: None = Depends(_require_admin)):
+    return evaluate_support_dataset(
+        load_support_dataset(settings.support_eval_dataset_path),
+        agent=agent,
+        force_template=True,
+    )
 
 
 @app.post("/api/workflows/escalation-note")

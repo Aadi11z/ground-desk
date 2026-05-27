@@ -39,6 +39,15 @@ class ProductRepository(Protocol):
         self, workspace_id: str, *, user_id: str | None = None
     ) -> list[dict]: ...
 
+    def get_conversation_messages(
+        self,
+        workspace_id: str,
+        conversation_id: str,
+        *,
+        user_id: str | None = None,
+        limit: int = 8,
+    ) -> list[dict]: ...
+
     def list_feedback(self, workspace_id: str) -> list[dict]: ...
 
     def membership_role(self, user_id: str, workspace_id: str) -> str | None: ...
@@ -104,6 +113,8 @@ class JsonlProductRepository:
                 "trace_id": response.trace_id,
                 "needs_escalation": response.needs_escalation,
                 "confidence": response.confidence,
+                "evidence_status": response.evidence_status,
+                "generation_model": response.generation_model,
             }
         )
         return conversation_id
@@ -128,6 +139,31 @@ class JsonlProductRepository:
             if item.get("workspace_id") == workspace_id
             and (user_id is None or item.get("user_id") == user_id)
         ]
+
+    def get_conversation_messages(
+        self,
+        workspace_id: str,
+        conversation_id: str,
+        *,
+        user_id: str | None = None,
+        limit: int = 8,
+    ) -> list[dict]:
+        history = [
+            item
+            for item in self.list_history(workspace_id, user_id=user_id)
+            if item.get("conversation_id") == conversation_id
+        ]
+        if not history:
+            raise ValueError("Conversation is not available in this workspace.")
+        messages: list[dict] = []
+        for item in history:
+            messages.extend(
+                [
+                    {"role": "user", "content": item.get("question", "")},
+                    {"role": "assistant", "content": item.get("answer", "")},
+                ]
+            )
+        return messages[-max(1, limit) :]
 
     def list_feedback(self, workspace_id: str) -> list[dict]:
         return [
@@ -260,6 +296,8 @@ class DatabaseProductRepository:
             Column("citations", JSON, nullable=False),
             Column("suggested_ticket_reply", Text, nullable=True),
             Column("confidence", Float, nullable=False),
+            Column("evidence_status", String(40), nullable=False),
+            Column("generation_model", String(100), nullable=True),
             Column("needs_escalation", Boolean, nullable=False),
             Column("created_at", DateTime(timezone=True), nullable=False),
         )
@@ -310,6 +348,12 @@ class DatabaseProductRepository:
 
         with self.engine.connect() as connection:
             connection.execute(select(self.workspaces.c.id).limit(1)).first()
+            connection.execute(
+                select(self.answer_traces.c.evidence_status).limit(1)
+            ).first()
+            connection.execute(
+                select(self.answer_traces.c.generation_model).limit(1)
+            ).first()
 
     def auth_healthcheck(self) -> None:
         from sqlalchemy import select
@@ -410,6 +454,8 @@ class DatabaseProductRepository:
                     citations=citations,
                     suggested_ticket_reply=response.suggested_ticket_reply,
                     confidence=response.confidence,
+                    evidence_status=response.evidence_status,
+                    generation_model=response.generation_model,
                     needs_escalation=response.needs_escalation,
                     created_at=now,
                 )
@@ -465,6 +511,52 @@ class DatabaseProductRepository:
                 .order_by(self.answer_traces.c.created_at.desc())
             ).mappings()
             return [_jsonable(dict(row)) for row in rows]
+
+    def get_conversation_messages(
+        self,
+        workspace_id: str,
+        conversation_id: str,
+        *,
+        user_id: str | None = None,
+        limit: int = 8,
+    ) -> list[dict]:
+        from sqlalchemy import select
+
+        with self.engine.connect() as connection:
+            conversation_statement = select(self.conversations.c.id).where(
+                self.conversations.c.id == conversation_id,
+                self.conversations.c.workspace_id == workspace_id,
+            )
+            if user_id is not None:
+                conversation_statement = conversation_statement.where(
+                    self.conversations.c.user_id == user_id
+                )
+            if connection.execute(conversation_statement).first() is None:
+                raise ValueError("Conversation is not available in this workspace.")
+
+            statement = select(
+                self.messages.c.role,
+                self.messages.c.content,
+                self.messages.c.created_at,
+            ).where(
+                self.messages.c.conversation_id == conversation_id,
+                self.messages.c.workspace_id == workspace_id,
+            )
+            if user_id is not None:
+                statement = statement.where(self.messages.c.user_id == user_id)
+            rows = list(
+                connection.execute(
+                    statement.order_by(
+                        self.messages.c.created_at.desc(),
+                        self.messages.c.role.asc(),
+                    ).limit(max(1, limit))
+                ).mappings()
+            )
+            rows.reverse()
+            return [
+                {"role": str(row["role"]), "content": str(row["content"])}
+                for row in rows
+            ]
 
     def list_feedback(self, workspace_id: str) -> list[dict]:
         from sqlalchemy import select

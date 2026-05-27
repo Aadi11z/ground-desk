@@ -30,6 +30,12 @@ class Settings:
     sample_dir: Path = Path(os.getenv("SAMPLE_DIR", "sample_corpus"))
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
     embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "auto")
+    gemini_embedding_max_attempts: int = int(
+        os.getenv("GEMINI_EMBEDDING_MAX_ATTEMPTS", "4")
+    )
+    gemini_embedding_retry_base_seconds: float = float(
+        os.getenv("GEMINI_EMBEDDING_RETRY_BASE_SECONDS", "2.0")
+    )
     embedding_dimensions: tuple[int, ...] = tuple(
         int(value.strip())
         for value in os.getenv(
@@ -40,6 +46,25 @@ class Settings:
     )
     generation_provider: str = os.getenv("GENERATION_PROVIDER", "gemini")
     generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash")
+    generation_fallback_models: tuple[str, ...] = tuple(
+        value.strip()
+        for value in os.getenv(
+            "GENERATION_FALLBACK_MODELS", "gemini-2.5-flash-lite"
+        ).split(",")
+        if value.strip()
+    )
+    gemini_generation_max_attempts: int = int(
+        os.getenv("GEMINI_GENERATION_MAX_ATTEMPTS", "4")
+    )
+    gemini_generation_retry_base_seconds: float = float(
+        os.getenv("GEMINI_GENERATION_RETRY_BASE_SECONDS", "2.0")
+    )
+    gemini_generation_request_delay_seconds: float = float(
+        os.getenv("GEMINI_GENERATION_REQUEST_DELAY_SECONDS", "0.0")
+    )
+    conversation_context_turns: int = int(
+        os.getenv("CONVERSATION_CONTEXT_TURNS", "4")
+    )
     auth_mode: str = os.getenv("AUTH_MODE", "demo")
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
@@ -51,7 +76,6 @@ class Settings:
     }
     default_workspace_id: str = os.getenv("DEFAULT_WORKSPACE_ID", "demo")
     max_context_chunks: int = int(os.getenv("MAX_CONTEXT_CHUNKS", "5"))
-    min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.35"))
     retrieval_mode: str = os.getenv("RETRIEVAL_MODE", "hybrid")
     dense_candidate_k: int = int(os.getenv("DENSE_CANDIDATE_K", "20"))
     sparse_candidate_k: int = int(os.getenv("SPARSE_CANDIDATE_K", "20"))
@@ -67,6 +91,8 @@ class Settings:
         == "true"
     )
     multi_query_limit: int = int(os.getenv("MULTI_QUERY_LIMIT", "3"))
+    query_planner_provider: str = os.getenv("QUERY_PLANNER_PROVIDER", "off")
+    query_planner_model: str = os.getenv("QUERY_PLANNER_MODEL", "gemini-2.5-flash")
     context_max_sentences: int = int(os.getenv("CONTEXT_MAX_SENTENCES", "3"))
     final_reranker: str = os.getenv("FINAL_RERANKER", "lexical")
     cross_encoder_model: str = os.getenv(
@@ -94,6 +120,12 @@ class Settings:
         os.getenv(
             "BENCHMARK_REPORT_PATH",
             "benchmarks/reports/nfcorpus_bge.json",
+        )
+    )
+    support_eval_dataset_path: Path = Path(
+        os.getenv(
+            "SUPPORT_EVAL_DATASET_PATH",
+            "benchmarks/datasets/grounddesk_support_v1.json",
         )
     )
 

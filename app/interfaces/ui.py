@@ -73,7 +73,7 @@ def ask(question: str, top_k: int, draft_ticket_reply: bool, agent):
         response.answer,
         citations,
         response.suggested_ticket_reply or "",
-        f"{response.confidence:.2f}",
+        response.evidence_status.replace("_", " "),
         str(response.needs_escalation),
         response.trace_id,
     )
@@ -124,7 +124,7 @@ def build_interface(
                 citations = gr.Textbox(label="Citations", lines=8)
             with gr.Row():
                 ticket = gr.Textbox(label="Suggested Ticket Reply", lines=5)
-                confidence = gr.Textbox(label="Confidence")
+                confidence = gr.Textbox(label="Evidence Support")
                 escalation = gr.Textbox(label="Needs Escalation")
                 trace = gr.Textbox(label="Trace ID")
             ask_btn.click(
