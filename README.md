@@ -1,8 +1,6 @@
 # GroundDesk
 
-GroundDesk is an end-to-end Generative AI support-agent project built to show the practical skills expected from an AI engineer: RAG, LLM API integration, structured generation, evals, safety checks, FastAPI, Gradio, Docker, CI, and Cloud Run deployment.
-
-It ingests support documentation, retrieves relevant evidence, generates cited answers, drafts customer-support replies, flags low-confidence cases for escalation, and exposes both production APIs and a portfolio-friendly web demo.
+GroundDesk is a B2B product built for organization's and their internal teams for their particular user base. It ingests support documentation, retrieves relevant evidence, generates cited answers, drafts customer-support replies, and escalates requests whose evidence is missing, ambiguous, or insufficient.
 
 ## Quickstart
 
@@ -32,26 +30,31 @@ http://localhost:8000
 The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
 The normal-user product UI is available at `http://localhost:8000`. A local
 Gradio management UI can be enabled explicitly with `ENABLE_GRADIO_ADMIN=true`;
-do not enable it on the public demo before authentication is implemented.
+do not expose it publicly while knowledge-management authorization remains
+temporary.
 
 ## Core Features
 
-- Structured support-document ingestion for Markdown, TXT, PDF, and URLs.
+- Structured support-document ingestion for Markdown, TXT, PDF, and URLs (Static, only http/https).
 - Stable document IDs, versioned manifests, and provenance-rich chunks.
 - Gemini-compatible MRL retrieval with named dense vector fields and coarse-to-fine reranking.
 - Hybrid retrieval with dense semantic search, BM25-style lexical search, and reciprocal-rank fusion.
 - Experimental adaptive retrieval with deterministic rewrites, multi-query expansion, HyDE-style expansion, and context compression; hybrid retrieval remains the measured default.
+- Optional Gemini structured query planner (`RETRIEVAL_MODE=planned`) with validated JSON plans, original-query preservation, and hybrid fallback on planner failure; it remains disabled until benchmarked.
 - Metadata filters plus final reranker hooks.
 - Pluggable vector-store backend with local development storage and optional Qdrant adapter.
-- Gemini-backed Retrieval-Augmented Generation with citations.
+- Gemini-backed Retrieval-Augmented Generation with citations and a fail-closed evidence-sufficiency gate.
 - Higher-level support workflows: escalation notes, summaries, FAQ generation, knowledge-gap detection, and support-article suggestions.
 - Synthetic eval-data generation plus retrieval/answer-quality metrics.
 - BEIR/qrels benchmark runner that reports retrieval Recall, MRR, nDCG, MAP, no-hit rate, and latency on labelled datasets.
 - PostgreSQL-compatible conversation, answer-trace, and feedback persistence,
   with JSONL fallback for zero-setup local demonstrations.
+- Bounded multi-turn context for continued threads, with prior conversation
+  separated from factual retrieved evidence.
 - Optional Supabase Auth-backed workspace membership enforcement; anonymous
   portfolio-demo users are confined to the fixed `demo` workspace.
-- Gemini-only generation using the server-side `GEMINI_API_KEY`.
+- Gemini generation using the server-side `GEMINI_API_KEY`, with a configurable
+  Flash-Lite fallback for primary-model quota or availability failures.
 - Workspace-scoped retrieval enforced from public-demo scope or authenticated
   Supabase workspace membership.
 - Disabled-by-default management endpoints; temporary API-key access is
@@ -62,6 +65,8 @@ do not enable it on the public demo before authentication is implemented.
 - FastAPI backend with OpenAPI docs.
 - Optional local Gradio management UI mounted at `/demo` only when enabled.
 - Golden-set evaluation endpoint.
+- Product-specific labelled support evaluation for citations, escalation and
+  follow-up behavior.
 - Dockerfile and GCP Cloud Run deployment guide.
 
 ## API Surface
@@ -81,6 +86,7 @@ POST   /api/evals/retrieval
 POST   /api/evals/answers
 POST   /api/evals/synthetic
 POST   /api/evals/variants
+POST   /api/evals/support
 POST   /api/workflows/escalation-note
 POST   /api/workflows/conversation-summary
 POST   /api/workflows/knowledge-gap
@@ -125,7 +131,8 @@ CHAT_HISTORY_PATH=data/chat_history.jsonl
 For a durable hosted implementation, use PostgreSQL or Supabase PostgreSQL:
 
 1. Apply [`migrations/0001_product_interactions.sql`](migrations/0001_product_interactions.sql)
-   in the target database.
+   and [`migrations/0003_evidence_status.sql`](migrations/0003_evidence_status.sql)
+   in the target database (`0002` is also required for authenticated workspace mode).
 2. Set server-side deployment variables:
 
 ```dotenv
@@ -137,17 +144,29 @@ DATABASE_AUTO_CREATE=false
 The database path now persists:
 
 - conversations and individual user/assistant messages;
-- answer traces containing answers, citations, confidence and escalation status;
+- answer traces containing answers, citations, evidence-support status, the
+  backward-compatible uncalibrated support score, escalation status, and the
+  actual generation model used;
 - feedback linked to a valid answer trace.
 
 `POST /api/chat` now returns a `conversation_id` for future multi-turn
-continuation. Storage for those turns is implemented; injecting prior turns
-into Gemini is deliberately deferred until the next evaluated feature step.
+continuation. For a continued thread, the backend loads a bounded number of
+prior stored turns under the active workspace/user boundary. Previous user
+questions contextualize retrieval; sanitized prior turns are supplied to
+Gemini as conversation context explicitly marked as non-evidence.
+Configure the bound with `CONVERSATION_CONTEXT_TURNS` (default `4`).
 The default deployed portfolio mode is intentionally anonymous and fixed to
 the `demo` workspace; callers cannot switch to a different workspace through
 `X-Workspace-ID`.
 `GET /api/health` reports degraded status if configured database tables are not
 reachable, which makes a missed migration visible during deployment validation.
+After applying the migrations, verify a Supabase PostgreSQL connection with:
+
+```bash
+./venv/bin/python scripts/check_database_setup.py \
+  --workspace-id demo \
+  --workspace-name "GroundDesk Demo"
+```
 
 ## Authentication And Workspaces
 
@@ -175,6 +194,7 @@ To enable authenticated mode:
 ```text
 migrations/0001_product_interactions.sql
 migrations/0002_auth_workspace_membership.sql
+migrations/0003_evidence_status.sql
 ```
 
 3. Insert each organization and authorized user membership in Supabase SQL:
@@ -212,26 +232,13 @@ BEIR NFCorpus test set in an isolated local index.
 Fast baseline with no API cost or model download:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py \
-  --download nfcorpus \
-  --modes sparse,hybrid,adaptive \
-  --embedding-provider hashing \
-  --embedding-model hashing \
-  --output results/nfcorpus_fast.json \
-  --report results/nfcorpus_fast.md
+./venv/bin/python scripts/run_retrieval_benchmark.py --download nfcorpus --modes sparse,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --output results/nfcorpus_fast.json --report results/nfcorpus_fast.md
 ```
 
 Stronger semantic comparison using a local embedding model:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py \
-  --dataset-dir benchmarks/data/nfcorpus \
-  --modes dense,hybrid,adaptive \
-  --embedding-provider sentence-transformers \
-  --embedding-model BAAI/bge-small-en-v1.5 \
-  --output results/nfcorpus_bge.json \
-  --report benchmarks/reports/nfcorpus_bge.md \
-  --publish-summary benchmarks/reports/nfcorpus_bge.json
+./venv/bin/python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --modes dense,hybrid,adaptive --embedding-provider sentence-transformers --embedding-model BAAI/bge-small-en-v1.5 --output results/nfcorpus_bge.json --report benchmarks/reports/nfcorpus_bge.md --publish-summary benchmarks/reports/nfcorpus_bge.json
 ```
 
 The first run downloads the public NFCorpus archive; the second may download
@@ -257,23 +264,106 @@ not improve the labelled benchmark.
 For a quota-controlled verification of the live Gemini embedding path:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py \
-  --dataset-dir benchmarks/data/nfcorpus \
-  --sample-queries 5 \
-  --sample-corpus-documents 150 \
-  --sample-seed 42 \
-  --modes dense,hybrid,adaptive \
-  --embedding-provider gemini \
-  --embedding-model gemini-embedding-2 \
-  --embedding-dimensions 768,1536,3072 \
-  --allow-gemini-corpus-embedding \
-  --output results/nfcorpus_gemini_slice.json \
-  --report benchmarks/reports/nfcorpus_gemini_slice.md \
-  --publish-summary benchmarks/reports/nfcorpus_gemini_slice.json
+./venv/bin/python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --sample-queries 5 --sample-corpus-documents 150 --sample-seed 42 --modes dense,hybrid,adaptive --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --allow-gemini-corpus-embedding --output results/nfcorpus_gemini_slice.json --report benchmarks/reports/nfcorpus_gemini_slice.md --publish-summary benchmarks/reports/nfcorpus_gemini_slice.json
 ```
 
 This slice verifies Gemini Embedding 2 and MRL-vector integration under free-tier
 constraints; it must not be described as full-corpus benchmark performance.
+
+## Product-Specific Support Evaluation
+
+The repository now includes an authored evaluation set over the bundled
+GroundDesk support corpus:
+
+```text
+benchmarks/datasets/grounddesk_support_v1.json
+```
+
+It contains 21 labelled cases: direct answerable questions, unsupported or
+ambiguous questions that should escalate, and follow-up questions requiring
+conversation context.
+
+Run the deterministic offline evaluation without API cost:
+
+```bash
+./venv/bin/python scripts/run_support_evaluation.py --modes dense,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --generation-provider template --top-k 3 --output results/grounddesk_support_hashing.json --report results/grounddesk_support_hashing.md
+```
+
+The pre-gate hashing/template run exposed that hybrid retrieval escalated only
+`20.0%` of unsupported/ambiguous examples because relative fused retrieval
+ranks were incorrectly being used as confidence. The implemented evidence
+gate no longer accepts RRF/reranker scores as correctness probabilities. The
+current offline run (`results/grounddesk_support_hashing_gated.md`) reports,
+for dense/hybrid/adaptive alike: `93.8%` correct top citation, `87.5%`
+expected-term coverage, `95.2%` escalation decision accuracy, `100.0%`
+unsupported/ambiguous escalation, and `100.0% / 80.0%` follow-up top-citation
+accuracy with / without context. One answerable case now escalates safely
+because its top retrieved document is wrong.
+
+After manually reviewing the cases, run the Gemini path:
+
+```bash
+./venv/bin/python scripts/run_support_evaluation.py \
+  --modes hybrid \
+  --embedding-provider gemini \
+  --embedding-model gemini-embedding-2 \
+  --embedding-dimensions 768,1536,3072 \
+  --generation-provider gemini \
+  --generation-model gemini-2.5-flash \
+  --generation-fallback-models gemini-2.5-flash-lite \
+  --allow-provider-api-calls \
+  --output results/grounddesk_support_gemini_demo_ready.json \
+  --report results/grounddesk_support_gemini_demo_ready.md
+```
+
+Gemini embedding and generation calls retry temporary overload/server or
+short-window rate-limit errors with bounded backoff and honor provider retry
+guidance; the evaluation command also applies conservative request delays.
+If `gemini-2.5-flash` is unavailable or its per-model quota is exhausted,
+generation tries the configured `gemini-2.5-flash-lite` fallback and stores
+the model used with the answer trace. The command writes a matching
+`*.partial.json` file after each completed case. If both configured models are
+unavailable, rerun the identical command to resume; use `--no-resume` only to
+discard a checkpoint intentionally.
+
+Because answer acceptance logic has changed since the earlier interrupted
+Gemini run, its `*.partial.json` file is historical evidence only; do not merge
+it with a new post-gate report. Use a new output filename or `--no-resume` for
+the next complete run.
+
+The labelled set requires up to 21 primary Gemini answers (unsupported cases
+may now be rejected before generation). If a free-tier model
+allows fewer generation requests in a quota window, a complete provider report
+must be resumed after quota availability resets; retrieval-only follow-up
+comparisons no longer waste additional generation requests.
+
+After the default hybrid run is complete, the optional structured planner can
+be evaluated separately. It adds one Gemini request for each evaluated query:
+
+```bash
+./venv/bin/python scripts/run_support_evaluation.py --modes planned --query-planner-provider gemini --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --generation-provider template --allow-provider-api-calls --output results/grounddesk_support_planned.json --report results/grounddesk_support_planned.md
+```
+
+Do not deploy planned retrieval unless its labelled results improve over the
+static hybrid baseline within acceptable latency and quota cost.
+
+This small product set is a demonstration/regression benchmark, not a
+customer-scale accuracy claim. Gemini output must be inspected manually before
+reporting generated-answer quality.
+
+Latest demo-ready provider run using Gemini Embedding 2 with the configured
+generation fallback:
+
+| Measure | Result |
+| --- | ---: |
+| Correct top citation for answerable cases | 100.0% |
+| Expected answer-term coverage | 93.8% |
+| Overall escalation accuracy | 85.7% |
+| Unsupported/ambiguous escalation accuracy | 100.0% |
+
+Model usage in that run was `3` Flash answers, `12` Flash-Lite fallback
+answers, and `6` cases gated without generation. This validates a stable demo
+path under Flash quota pressure; it is not a Flash-only benchmark.
 
 ## Project Layout
 
@@ -288,10 +378,12 @@ app/
 sample_corpus/          Built-in demo support docs
 scripts/                Operational helpers such as Qdrant migration
 benchmarks/data/        Downloaded evaluation corpora (ignored by git)
+benchmarks/datasets/    Product-specific labelled evaluation cases
 benchmarks/reports/     Reviewed benchmark artifacts displayed in the demo
 tests/                  Unit tests
 migrations/             PostgreSQL schema migrations for durable product state
 docs/                   Project docs and roadmap
+presentation/           Generated interview/demo slide deck
 ```
 
 ## Documentation
@@ -299,6 +391,14 @@ docs/                   Project docs and roadmap
 - [Implementation guide](docs/IMPLEMENTATION.md)
 - [Product roadmap](docs/PRODUCT_ROADMAP.md)
 - [Deployment and operations](docs/DEPLOYMENT.md)
+- [Two-hour demo runbook](docs/DEMO_RUNBOOK.md)
+
+Generate the black-and-white interview deck:
+
+```bash
+./venv/bin/python -m pip install python-pptx
+./venv/bin/python scripts/create_demo_deck.py
+```
 
 ## Deploy
 
