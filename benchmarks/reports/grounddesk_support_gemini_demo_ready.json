@@ -1,0 +1,893 @@
+{
+  "created_at": "2026-05-27T00:16:36.975217+00:00",
+  "configuration": {
+    "sample_dir": "sample_corpus",
+    "embedding_provider": "gemini",
+    "embedding_model": "gemini-embedding-2",
+    "embedding_backend": "gemini",
+    "embedding_dimensions": [
+      768,
+      1536,
+      3072
+    ],
+    "generation_provider": "gemini",
+    "generation_model": "gemini-2.5-flash",
+    "generation_fallback_models": [
+      "gemini-2.5-flash-lite"
+    ],
+    "query_planner_provider": "off",
+    "query_planner_model": "gemini-2.5-flash",
+    "conversation_context_turns": 4,
+    "gemini_generation_max_attempts": 5,
+    "gemini_generation_retry_base_seconds": 2.0,
+    "gemini_generation_request_delay_seconds": 1.0,
+    "gemini_embedding_request_delay_seconds": 1.1,
+    "gemini_embedding_max_attempts": 5,
+    "gemini_embedding_retry_base_seconds": 2.0
+  },
+  "runs": [
+    {
+      "dataset": {
+        "name": "grounddesk_support_v1",
+        "version": "1.0",
+        "corpus": "sample_corpus",
+        "review_status": "engineer-authored baseline; manually review before presenting results as release quality",
+        "cases": 21,
+        "answerable_cases": 16,
+        "no_answer_cases": 5,
+        "follow_up_cases": 5
+      },
+      "top_k": 3,
+      "generation_mode": "provider",
+      "metrics": {
+        "answerable_evidence_hit_rate": 1.0,
+        "answerable_top_citation_accuracy": 1.0,
+        "answerable_citation_precision": 0.3333333333333333,
+        "answer_term_coverage": 0.9375,
+        "escalation_accuracy": 0.8571428571428571,
+        "answerable_non_escalation_accuracy": 0.8125,
+        "no_answer_escalation_accuracy": 1.0,
+        "follow_up_evidence_hit_rate": 1.0,
+        "follow_up_top_citation_accuracy": 1.0,
+        "follow_up_without_context_top_citation_accuracy": 1.0
+      },
+      "results": [
+        {
+          "case_id": "auth_reset_delivery",
+          "category": "answerable",
+          "question": "How long do password reset emails normally take to arrive?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "authentication"
+          ],
+          "citation_titles": [
+            "authentication",
+            "product_usage",
+            "billing"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.714,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash",
+          "answer": "Password reset emails normally arrive within five minutes. If it doesn't arrive after ten minutes, the customer should retry once.",
+          "trace_id": "2b77e9155b74",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How long do password reset emails normally take to arrive?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "auth_reset_escalation",
+          "category": "answerable",
+          "question": "When should support escalate a password reset email that never arrived?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "authentication"
+          ],
+          "citation_titles": [
+            "authentication",
+            "product_usage",
+            "billing"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.571,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "If a password reset email does not arrive within ten minutes, ask the customer to try again once. If it still doesn't arrive, escalate the issue, providing the customer's account email and the timestamp of the request (doc_977d1deb4beb:chunk:0). Customers should also be advised to check their spam folder and confirm their email address is correctly listed for the account (doc_977d1deb4beb:chunk:0). Normally, these emails should arrive within five minutes (doc_977d1deb4beb:chunk:0).",
+          "trace_id": "6c2c2445da8d",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "When should support escalate a password reset email that never arrived?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "auth_sso_checks",
+          "category": "answerable",
+          "question": "What should I verify when SSO users cannot sign in?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "authentication"
+          ],
+          "citation_titles": [
+            "authentication",
+            "product_usage",
+            "billing"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": true,
+          "escalation_hit": false,
+          "confidence": 1.0,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "If SSO users are unable to sign in, you should verify the following:\n- The SAML metadata URL is reachable.\n- The certificate has not expired.\n- The user is assigned to the application in the identity provider. (doc_977d1deb4beb:chunk:0)",
+          "trace_id": "4220487836ef",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "What should I verify when SSO users cannot sign in?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "billing_invoice_location",
+          "category": "answerable",
+          "question": "Where can a customer download their invoice?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "authentication",
+            "product_usage"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.75,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Customers can download invoices by navigating to Settings > Billing > Invoices. Please note that invoice exports are provided as PDF files and are only available for paid workspaces. If the 'Invoices' tab is not visible, please ensure the user has workspace owner or billing admin privileges.",
+          "trace_id": "6f321f53ce89",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Where can a customer download their invoice?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "billing_invoice_permissions",
+          "category": "answerable",
+          "question": "Which roles can see the Invoices tab?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.6,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "The Invoices tab is visible to workspace owners and billing administrators.",
+          "trace_id": "e35be717d378",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Which roles can see the Invoices tab?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "billing_annual_refund",
+          "category": "answerable",
+          "question": "Is an annual plan refundable after purchase?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.8,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash",
+          "answer": "Annual plans are refundable within 14 days of purchase, provided the account has not exceeded fair-use limits. (doc_369490babf90:chunk:0)",
+          "trace_id": "fd31ba7f5ad0",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Is an annual plan refundable after purchase?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "billing_monthly_proration",
+          "category": "answerable",
+          "question": "Are monthly plans prorated after the renewal date?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 1.0,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash",
+          "answer": "No, monthly plans are not prorated after the renewal date. (doc_369490babf90:chunk:0)",
+          "trace_id": "9a0ee0be8e88",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Are monthly plans prorated after the renewal date?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "usage_invite_teammates",
+          "category": "answerable",
+          "question": "Where can a workspace owner invite teammates?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 1.0,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Workspace owners can invite teammates by navigating to Settings > Members. If an invite link expires, it can be resent from the pending invitations table on the same page. (doc_3a67c500b50c:chunk:0)",
+          "trace_id": "3c66b4009253",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Where can a workspace owner invite teammates?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "usage_invite_expiry",
+          "category": "answerable",
+          "question": "How long does an invitation remain valid?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "authentication",
+            "billing"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": false,
+          "expected_escalation": false,
+          "needs_escalation": true,
+          "escalation_hit": false,
+          "confidence": 0.25,
+          "evidence_status": "limited",
+          "generation_model": null,
+          "answer": "I cannot answer this question from the available support documentation. This request should be reviewed by a support specialist.",
+          "trace_id": "9ef5356e9495",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 1,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How long does an invitation remain valid?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "usage_csv_roles",
+          "category": "answerable",
+          "question": "Which users can export CSV reports?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.8,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Users with analyst, admin, or owner roles can export CSV reports from the Reports page.",
+          "trace_id": "7ded07fee80a",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Which users can export CSV reports?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "usage_large_exports",
+          "category": "answerable",
+          "question": "How are large CSV exports delivered?",
+          "answerable": true,
+          "has_conversation_context": false,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 1.0,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Large CSV exports are delivered via email once they are complete. These exports are accessible on the Reports page for users with analyst, admin, or owner roles and will include any filters that are currently applied.",
+          "trace_id": "7ea3699c7fcb",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 2,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How are large CSV exports delivered?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "followup_invoice_access",
+          "category": "follow_up",
+          "question": "Who is allowed to see that tab?",
+          "answerable": true,
+          "has_conversation_context": true,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "authentication",
+            "product_usage"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.833,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Only workspace owners or billing administrators are allowed to see the Invoices tab.",
+          "trace_id": "4f52f858a570",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Where can customers download invoices?\nWho is allowed to see that tab?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          },
+          "without_context": {
+            "top_citation_hit": true,
+            "evidence_hit": true
+          },
+          "context_improved_top_citation": false
+        },
+        {
+          "case_id": "followup_refund_monthly",
+          "category": "follow_up",
+          "question": "What about monthly plans after renewal?",
+          "answerable": true,
+          "has_conversation_context": true,
+          "expected_titles": [
+            "billing"
+          ],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.857,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "Monthly plans are not prorated after their renewal date.",
+          "trace_id": "d37a098fe87e",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Can an annual plan be refunded?\nWhat about monthly plans after renewal?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          },
+          "without_context": {
+            "top_citation_hit": true,
+            "evidence_hit": true
+          },
+          "context_improved_top_citation": false
+        },
+        {
+          "case_id": "followup_reset_escalation",
+          "category": "follow_up",
+          "question": "When should I escalate this?",
+          "answerable": true,
+          "has_conversation_context": true,
+          "expected_titles": [
+            "authentication"
+          ],
+          "citation_titles": [
+            "authentication",
+            "product_usage",
+            "billing"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 0.8,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "You should escalate the issue if the password reset email does not arrive after ten minutes. Before escalating, ask the customer to retry sending the email once. When escalating, include the account email and timestamp.",
+          "trace_id": "103f14799b3f",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "My password reset email is missing.\nWhen should I escalate this?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          },
+          "without_context": {
+            "top_citation_hit": true,
+            "evidence_hit": true
+          },
+          "context_improved_top_citation": false
+        },
+        {
+          "case_id": "followup_invite_expired",
+          "category": "follow_up",
+          "question": "What can I do if the link expires?",
+          "answerable": true,
+          "has_conversation_context": true,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": false,
+          "escalation_hit": true,
+          "confidence": 1.0,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "If the invite link expires, the owner can resend it from the pending invitations table.",
+          "trace_id": "b58352398573",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How do I invite a teammate?\nWhat can I do if the link expires?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          },
+          "without_context": {
+            "top_citation_hit": true,
+            "evidence_hit": true
+          },
+          "context_improved_top_citation": false
+        },
+        {
+          "case_id": "followup_large_export_delivery",
+          "category": "follow_up",
+          "question": "How do large ones arrive?",
+          "answerable": true,
+          "has_conversation_context": true,
+          "expected_titles": [
+            "product_usage"
+          ],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": true,
+          "top_citation_hit": true,
+          "citation_precision": 0.3333333333333333,
+          "answer_term_hit": true,
+          "expected_escalation": false,
+          "needs_escalation": true,
+          "escalation_hit": false,
+          "confidence": 0.429,
+          "evidence_status": "supported",
+          "generation_model": "gemini-2.5-flash-lite",
+          "answer": "I am sorry, but the provided documentation does not contain information on how large items arrive. The evidence mentions password reset emails normally arrive within five minutes and can be found in spam folders, and that CSV exports are available on the Reports page for users with analyst, admin, or owner roles.",
+          "trace_id": "54d6b22dde78",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Can I make a CSV export from reports?\nHow do large ones arrive?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          },
+          "without_context": {
+            "top_citation_hit": true,
+            "evidence_hit": true
+          },
+          "context_improved_top_citation": false
+        },
+        {
+          "case_id": "unsupported_payroll",
+          "category": "unsupported",
+          "question": "Can you configure my payroll software?",
+          "answerable": false,
+          "has_conversation_context": false,
+          "expected_titles": [],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": null,
+          "top_citation_hit": null,
+          "citation_precision": null,
+          "answer_term_hit": null,
+          "expected_escalation": true,
+          "needs_escalation": true,
+          "escalation_hit": true,
+          "confidence": 0.0,
+          "evidence_status": "limited",
+          "generation_model": null,
+          "answer": "I cannot answer this question from the available support documentation. This request should be reviewed by a support specialist.",
+          "trace_id": "094ae40cbcf9",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 2,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Can you configure my payroll software?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "unsupported_crm_integration",
+          "category": "unsupported",
+          "question": "How do I integrate my account with Salesforce?",
+          "answerable": false,
+          "has_conversation_context": false,
+          "expected_titles": [],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": null,
+          "top_citation_hit": null,
+          "citation_precision": null,
+          "answer_term_hit": null,
+          "expected_escalation": true,
+          "needs_escalation": true,
+          "escalation_hit": true,
+          "confidence": 0.333,
+          "evidence_status": "limited",
+          "generation_model": null,
+          "answer": "I cannot answer this question from the available support documentation. This request should be reviewed by a support specialist.",
+          "trace_id": "48cc2fa9ff8c",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How do I integrate my account with Salesforce?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "unsupported_account_deletion",
+          "category": "unsupported",
+          "question": "How can I permanently delete my account and all retained data?",
+          "answerable": false,
+          "has_conversation_context": false,
+          "expected_titles": [],
+          "citation_titles": [
+            "billing",
+            "product_usage",
+            "authentication"
+          ],
+          "evidence_hit": null,
+          "top_citation_hit": null,
+          "citation_precision": null,
+          "answer_term_hit": null,
+          "expected_escalation": true,
+          "needs_escalation": true,
+          "escalation_hit": true,
+          "confidence": 0.167,
+          "evidence_status": "limited",
+          "generation_model": null,
+          "answer": "I cannot answer this question from the available support documentation. This request should be reviewed by a support specialist.",
+          "trace_id": "f346e7d540fa",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "How can I permanently delete my account and all retained data?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "unsupported_api_rate_limit",
+          "category": "unsupported",
+          "question": "What is the API rate limit for webhook delivery?",
+          "answerable": false,
+          "has_conversation_context": false,
+          "expected_titles": [],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": null,
+          "top_citation_hit": null,
+          "citation_precision": null,
+          "answer_term_hit": null,
+          "expected_escalation": true,
+          "needs_escalation": true,
+          "escalation_hit": true,
+          "confidence": 0.0,
+          "evidence_status": "limited",
+          "generation_model": null,
+          "answer": "I cannot answer this question from the available support documentation. This request should be reviewed by a support specialist.",
+          "trace_id": "8fd43985be15",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 3,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "What is the API rate limit for webhook delivery?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        },
+        {
+          "case_id": "ambiguous_export",
+          "category": "ambiguous",
+          "question": "Can I export it?",
+          "answerable": false,
+          "has_conversation_context": false,
+          "expected_titles": [],
+          "citation_titles": [
+            "product_usage",
+            "billing",
+            "authentication"
+          ],
+          "evidence_hit": null,
+          "top_citation_hit": null,
+          "citation_precision": null,
+          "answer_term_hit": null,
+          "expected_escalation": true,
+          "needs_escalation": true,
+          "escalation_hit": true,
+          "confidence": 0.0,
+          "evidence_status": "clarification_needed",
+          "generation_model": null,
+          "answer": "I need more detail to find the relevant documented procedure. Please clarify the product area or issue before I answer.",
+          "trace_id": "b914ee641318",
+          "retrieval_diagnostics": {
+            "mode": "hybrid",
+            "dense_candidates": 3,
+            "sparse_candidates": 2,
+            "reranked_candidates": 3,
+            "query_count": 1,
+            "used_hyde": false,
+            "rewritten_query": "Can I export it?",
+            "planner": "static",
+            "planner_reason": "original_query",
+            "planner_fallback": false
+          }
+        }
+      ],
+      "strategy": "hybrid+lexical"
+    }
+  ]
+}
