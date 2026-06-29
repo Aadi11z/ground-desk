@@ -77,9 +77,11 @@ def main() -> None:
         if args.member_user_id
         else None
     )
-    migrations = ["0001_product_interactions.sql", "0003_evidence_status.sql"]
-    if settings.auth_mode.lower() == "supabase" or args.member_user_id:
-        migrations.insert(1, "0002_auth_workspace_membership.sql")
+    migrations = [
+        "0001_product_interactions.sql",
+        "0002_auth_workspace_membership.sql",
+        "0003_evidence_status.sql",
+    ]
     print(
         json.dumps(
             {

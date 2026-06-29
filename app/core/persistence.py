@@ -357,12 +357,16 @@ class DatabaseProductRepository:
 
         with self.engine.connect() as connection:
             connection.execute(select(self.workspaces.c.id).limit(1)).first()
+            connection.execute(select(self.conversations.c.user_id).limit(1)).first()
+            connection.execute(select(self.messages.c.user_id).limit(1)).first()
+            connection.execute(select(self.answer_traces.c.user_id).limit(1)).first()
             connection.execute(
                 select(self.answer_traces.c.evidence_status).limit(1)
             ).first()
             connection.execute(
                 select(self.answer_traces.c.generation_model).limit(1)
             ).first()
+            connection.execute(select(self.feedback.c.user_id).limit(1)).first()
 
     def auth_healthcheck(self) -> None:
         from sqlalchemy import select

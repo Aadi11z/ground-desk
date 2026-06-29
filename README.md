@@ -11,14 +11,8 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pytest -q
 
-cp .env.example .env
-# edit .env and set GEMINI_API_KEY
-
-docker compose up -d qdrant
-curl -X DELETE http://localhost:6333/collections/grounddesk_chunks
-rm -rf data/index data/documents
-
-python -m uvicorn app.interfaces.api:app --reload
+# Zero-cloud local product demo: local vectors, template answers, admin upload enabled.
+make
 ```
 
 Open the demo:
@@ -30,6 +24,42 @@ http://localhost:8000
 The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
 The product UI is available at `http://localhost:8000`; OpenAPI documentation
 is available at `http://localhost:8000/docs`.
+
+### One-Command Local Modes
+
+| Command | Purpose |
+| --- | --- |
+| `make` | Start the default offline local product demo. |
+| `make local` | Run without cloud services using local vector storage, hashing embeddings and deterministic answer generation. |
+| `make local-fresh` | Clear only the offline local index, then ingest all files currently in `sample_corpus/` again. |
+| `make local-gemini` | Run locally with local vector storage and actual Gemini embeddings/generation; reads `GEMINI_API_KEY` from `.env` or the shell. |
+| `make local-gemini-fresh` | Clear only the Gemini local index, then rebuild it from `sample_corpus/`. |
+
+The offline and Gemini commands use separate index directories so vectors
+created by different embedding providers are never mixed. Both local modes
+bind only to `127.0.0.1` by default and enable local PDF upload at `/docs`
+using `X-Admin-API-Key: local-admin-secret`.
+
+To test a newly added PDF as part of the seeded local corpus:
+
+```bash
+cp /path/to/your-document.pdf sample_corpus/
+make local-fresh
+```
+
+To use Gemini locally:
+
+```bash
+cp .env.example .env
+# edit .env and set GEMINI_API_KEY
+make local-gemini-fresh
+```
+
+Set a different host, port or local admin key without editing the file:
+
+```bash
+make local PORT=8010 LOCAL_ADMIN_KEY=replace-this-value
+```
 
 ## Core Features
 
@@ -127,9 +157,18 @@ CHAT_HISTORY_PATH=data/chat_history.jsonl
 
 For a durable hosted implementation, use PostgreSQL or Supabase PostgreSQL:
 
-1. Apply [`migrations/0001_product_interactions.sql`](migrations/0001_product_interactions.sql)
-   and [`migrations/0003_evidence_status.sql`](migrations/0003_evidence_status.sql)
-   in the target database (`0002` is also required for authenticated workspace mode).
+1. Apply all three SQL migrations in order:
+
+```text
+migrations/0001_product_interactions.sql
+migrations/0002_auth_workspace_membership.sql
+migrations/0003_evidence_status.sql
+```
+
+   `0002` adds the `user_id` ownership columns used by conversation history,
+   feedback and authenticated workspace mode. In Supabase, run it even for the
+   simple demo database path so the deployed code and schema match.
+
 2. Set server-side deployment variables:
 
 ```dotenv
