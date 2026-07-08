@@ -58,3 +58,15 @@ local-gemini-fresh: check-local-venv
 
 check-local-venv:
 	@test -x "$(PYTHON)" || (echo "Missing $(PYTHON). Run: python -m venv venv && ./venv/bin/python -m pip install -r requirements.txt" && exit 1)
+
+dev: 
+	uv run uvicorn app.api.router:app --reload
+
+lint:
+	uv run ruff check .
+
+format:
+	uv run ruff format .
+
+test: 
+	uv run pytest -q
