@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter
 from app.core.config import settings
-from routes import analytics, benchmark, chat, client_config, demo, documents, evals, feedback, health, history, workflows, workspaces
+from app.api.routes import analytics, benchmark, chat, client_config, demo, documents, evals, feedback, health, history, workflows, workspaces
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title=settings.app_name, version="0.2.0")
@@ -19,3 +19,5 @@ router.include_router(health.router)
 router.include_router(history.router)
 router.include_router(workflows.router)
 router.include_router(workspaces.router)
+
+app.include_router(router)

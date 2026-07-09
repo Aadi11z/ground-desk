@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from api.dependencies import (
+from app.api.dependencies import (
     get_vector_store,
     get_product_repository,
     get_access_controller,
