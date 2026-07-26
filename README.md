@@ -424,10 +424,9 @@ presentation/           Generated interview/demo slide deck
 
 ## Documentation
 
-- [Implementation guide](docs/IMPLEMENTATION.md)
-- [Product roadmap](docs/PRODUCT_ROADMAP.md)
-- [Deployment and operations](docs/DEPLOYMENT.md)
-- [Two-hour demo runbook](docs/DEMO_RUNBOOK.md)
+- [Project plan](docs/PLAN.md)
+- [Current state](docs/CURRENT_STATE.md)
+- [Demo runbook](docs/DEMO_RUNBOOK.md)
 
 Generate the black-and-white interview deck:
 
@@ -445,4 +444,4 @@ docker build -t ground-desk .
 docker run --rm -p 8080:8080 ground-desk
 ```
 
-Deploy to Cloud Run using [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+See [PLAN.md](PLAN.md) for the planned Cloud Run and Cloudflare Pages deployment.
