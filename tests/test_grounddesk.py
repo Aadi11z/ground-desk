@@ -3,9 +3,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
-from app.generation.llm import GeminiProvider, _is_retryable_gemini_error as generation_retryable
-from app.generation.workflows import SupportWorkflowService
+from app.rag.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
+from app.rag.generation.llm import GeminiProvider, _is_retryable_gemini_error as generation_retryable
+from app.rag.generation.workflows import SupportWorkflowService
 from app.interfaces.demo_product import demo_product_html
 from app.core.auth import AccessController, AccessError, AuthenticatedUser
 from app.core.config import Settings
@@ -15,14 +15,14 @@ from app.core.persistence import (
     analytics_for,
     normalize_database_url,
 )
-from app.ingestion.loaders import LoadedDocument
-from app.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
-from app.retrieval.retriever import HybridRetriever
-from app.retrieval.retriever import _select_query_vector_name
-from app.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
-from app.retrieval.compression import compress_results
-from app.retrieval.rerank import LexicalFinalReranker
-from app.ingestion.service import IngestionService
+from app.rag.ingestion.loaders import LoadedDocument
+from app.rag.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
+from app.rag.retrieval.retriever import HybridRetriever
+from app.rag.retrieval.retriever import _select_query_vector_name
+from app.rag.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
+from app.rag.retrieval.compression import compress_results
+from app.rag.retrieval.rerank import LexicalFinalReranker
+from app.rag.ingestion.service import IngestionService
 from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.safety import redact_secrets, strip_prompt_injection
 from app.core.workspace import (
@@ -30,14 +30,14 @@ from app.core.workspace import (
     metadata_matches_workspace,
     normalize_workspace_id,
 )
-from app.retrieval.vector_store import LocalVectorStore, QdrantVectorStore, VectorStore
-from app.retrieval.vector_store import (
+from app.rag.retrieval.vector_store import LocalVectorStore, QdrantVectorStore, VectorStore
+from app.rag.retrieval.vector_store import (
     ChunkRecord,
     DocumentManifest,
     SearchResult,
     _reconstruct_documents,
 )
-from app.retrieval.factory import create_vector_store
+from app.rag.retrieval.factory import create_vector_store
 from app.evals.retrieval import run_retrieval_evals
 from app.evals.answers import run_answer_quality_evals
 from app.evals.synthetic import generate_synthetic_eval_dataset
@@ -149,7 +149,7 @@ def test_agent_includes_previous_turns_as_non_evidence_generation_context(
 
     provider = CaptureProvider()
     monkeypatch.setattr(
-        "app.generation.agent.get_generation_provider",
+        "app.rag.generation.agent.get_generation_provider",
         lambda **kwargs: provider,
     )
 
@@ -941,7 +941,7 @@ def test_insufficient_evidence_does_not_spend_generation_request(tmp_path, monke
     def fail_provider(**kwargs):
         raise AssertionError("generation must not run when evidence is insufficient")
 
-    monkeypatch.setattr("app.generation.agent.get_generation_provider", fail_provider)
+    monkeypatch.setattr("app.rag.generation.agent.get_generation_provider", fail_provider)
 
     response = agent.answer(ChatRequest(question="Do you integrate with Salesforce CRM?"))
 
@@ -1399,7 +1399,7 @@ def test_followup_comparison_does_not_generate_a_second_answer(tmp_path, monkeyp
             }
 
     monkeypatch.setattr(
-        "app.generation.agent.get_generation_provider",
+        "app.rag.generation.agent.get_generation_provider",
         lambda **kwargs: CountingProvider(),
     )
 

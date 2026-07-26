@@ -23,7 +23,7 @@ local: check-local-venv
 	EMBEDDING_DIMENSIONS=384 \
 	GENERATION_PROVIDER=template \
 	ADMIN_API_KEY=$(LOCAL_ADMIN_KEY) \
-	$(PYTHON) -m uvicorn app.interfaces.api:app --reload --host $(HOST) --port $(PORT)
+	$(PYTHON) -m uvicorn app.main:app --reload --host $(HOST) --port $(PORT)
 
 local-fresh: check-local-venv
 	@echo "Removing the offline local index and re-ingesting sample_corpus/ on startup."
@@ -49,7 +49,7 @@ local-gemini: check-local-venv
 	RETRIEVAL_MODE=hybrid \
 	QUERY_PLANNER_PROVIDER=off \
 	ADMIN_API_KEY=$(LOCAL_ADMIN_KEY) \
-	$(PYTHON) -m uvicorn app.interfaces.api:app --reload --host $(HOST) --port $(PORT)
+	$(PYTHON) -m uvicorn app.main:app --reload --host $(HOST) --port $(PORT)
 
 local-gemini-fresh: check-local-venv
 	@echo "Removing the Gemini local index and re-ingesting sample_corpus/ on startup."
@@ -60,7 +60,7 @@ check-local-venv:
 	@test -x "$(PYTHON)" || (echo "Missing $(PYTHON). Run: python -m venv venv && ./venv/bin/python -m pip install -r requirements.txt" && exit 1)
 
 dev: 
-	uv run uvicorn app.api.router:app --reload
+	uv run uvicorn app.main:app --reload
 
 lint:
 	uv run ruff check .

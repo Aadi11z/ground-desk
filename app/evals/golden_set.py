@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..generation.agent import SupportAgent
-from ..core.models import ChatRequest
+from app.rag.generation.agent import SupportAgent
+from app.core.models import ChatRequest
 
 
 @dataclass(frozen=True)

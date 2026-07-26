@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..retrieval.vector_store import ChunkRecord
+from app.rag.retrieval.vector_store import ChunkRecord
 
 
 def generate_synthetic_eval_dataset(records: list[ChunkRecord]) -> dict:

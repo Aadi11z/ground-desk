@@ -30,10 +30,10 @@ from app.evals.support_dataset import (  # noqa: E402
     load_support_dataset,
     report_as_markdown,
 )
-from app.generation.agent import SupportAgent  # noqa: E402
-from app.ingestion.service import IngestionService  # noqa: E402
-from app.retrieval.embeddings import EmbeddingModel  # noqa: E402
-from app.retrieval.vector_store import LocalVectorStore  # noqa: E402
+from app.rag.generation.agent import SupportAgent  # noqa: E402
+from app.rag.ingestion.service import IngestionService  # noqa: E402
+from app.rag.retrieval.embeddings import EmbeddingModel  # noqa: E402
+from app.rag.retrieval.vector_store import LocalVectorStore  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

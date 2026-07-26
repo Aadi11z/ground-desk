@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .retrieval import run_retrieval_evals
-from ..retrieval.retriever import HybridRetriever
+from app.rag.retrieval.retriever import HybridRetriever
 
 
 def compare_retrieval_variants(agent) -> dict:

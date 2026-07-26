@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from app.core.config import settings
-from app.retrieval.vector_store import LocalVectorStore, QdrantVectorStore
+from app.rag.retrieval.vector_store import LocalVectorStore, QdrantVectorStore
 
 
 def main() -> None:

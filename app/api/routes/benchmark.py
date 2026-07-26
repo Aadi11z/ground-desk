@@ -2,13 +2,10 @@ from fastapi import APIRouter
 import json
 from app.core.config import settings
 
-router = APIRouter(
-    prefix="/benchmark",
-    tags=["benchmark"]
-)
+router = APIRouter(prefix="/benchmark", tags=["benchmark"])
 
 
-@app.get("/api/benchmark/summary")
+@router.get("/summary")
 def benchmark_summary():
     """Return public summaries of reviewed retrieval benchmark artifacts."""
     reports_dir = settings.benchmark_report_path.parent

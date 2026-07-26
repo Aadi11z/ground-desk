@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from ..retrieval.embeddings import EmbeddingModel
-from ..retrieval.retriever import HybridRetriever
+from app.rag.retrieval.embeddings import EmbeddingModel
+from app.rag.retrieval.retriever import HybridRetriever
 
 
 @dataclass(frozen=True)

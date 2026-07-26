@@ -20,12 +20,12 @@ from typing import Callable, Iterable
 
 import numpy as np
 
-from ..core.config import Settings
-from ..ingestion.chunking import chunk_text
-from ..ingestion.quality import filter_chunks
-from ..retrieval.embeddings import EmbeddingModel
-from ..retrieval.retriever import HybridRetriever
-from ..retrieval.vector_store import ChunkRecord, DocumentManifest, LocalVectorStore
+from app.core.config import Settings
+from app.rag.ingestion.chunking import chunk_text
+from app.rag.ingestion.quality import filter_chunks
+from app.rag.retrieval.embeddings import EmbeddingModel
+from app.rag.retrieval.retriever import HybridRetriever
+from app.rag.retrieval.vector_store import ChunkRecord, DocumentManifest, LocalVectorStore
 
 
 @dataclass(frozen=True)

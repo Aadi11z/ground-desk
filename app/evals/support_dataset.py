@@ -13,8 +13,8 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from ..core.models import ChatRequest
-from ..generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
+from app.core.models import ChatRequest
+from app.rag.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
 
 
 @dataclass(frozen=True)

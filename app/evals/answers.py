@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from .golden_set import GOLDEN_SET
-from ..core.models import ChatRequest
-from ..generation.agent import SupportAgent
+from app.core.models import ChatRequest
+from app.rag.generation.agent import SupportAgent
 
 
 def run_answer_quality_evals(agent: SupportAgent) -> dict:

@@ -30,7 +30,7 @@ from app.evals.benchmark import (  # noqa: E402
     report_as_markdown,
     select_labelled_slice,
 )
-from app.retrieval.embeddings import EmbeddingModel  # noqa: E402
+from app.rag.retrieval.embeddings import EmbeddingModel  # noqa: E402
 
 
 BEIR_DOWNLOADS = {
