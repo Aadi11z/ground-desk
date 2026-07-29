@@ -1,0 +1,63 @@
+[project]
+name = "ground-desk"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Aaditya Bhatnagar", email = "11aadityab@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.12.0",
+    "fastapi>=0.110.0",
+    "google-genai>=1.0.0",
+    "numpy>=1.24.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic>=2.6.0",
+    "pypdf>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
+    "qdrant-client>=1.15.0",
+    "sentence-transformers>=2.7.0",
+    "sqlalchemy>=2.0.0",
+    "uvicorn[standard]>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.15.20",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+# Enforce correctness, import ordering, Python modernization, and the selected
+# high-signal Bugbear rules. Formatting is checked independently in CI.
+select = [
+    "F", # Pyflakes (critical logic bugs, unused imports)
+    "I", # isort (clean, ordered imports)
+    "UP", # pyupgrade (modernizes Python syntax automatically)
+    "B005", # misleading multi-character strip
+    "B006", # mutable default arguments
+    "B007", # unused loop variables
+    "B012", # control flow in finally can hide exceptions
+    "B014", # duplicate exception handlers
+    "B015", # useless comparisons
+    "B016", # raising literals
+    "B018", # useless expressions
+    "B019", # cached instance methods can leak memory
+    "B020", # loop variable overwrites its iterable
+    "B021", # f-string used as a docstring
+    "B022", # empty contextlib.suppress
+    "B904", # explicit exception chaining
+]
+
+[project.scripts]
+ground-desk = "ground_desk:main"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13.0"]
+build-backend = "uv_build"
