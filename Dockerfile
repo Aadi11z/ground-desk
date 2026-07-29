@@ -17,7 +17,6 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY app ./app
-COPY src ./src
 COPY sample_corpus ./sample_corpus
 COPY benchmarks/datasets ./benchmarks/datasets
 COPY benchmarks/reports ./benchmarks/reports
