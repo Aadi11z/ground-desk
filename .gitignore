@@ -1,6 +1,6 @@
 # Environment
 .env
-venv/
+.venv/
 
 # Python
 __pycache__/
@@ -16,6 +16,8 @@ __pycache__/
 /benchmarks/data/
 /scripts/create_demo_deck.py
 /presentation/
-/docs/
+/graphify-out/
+docs/
+
 # OS
 .DS_Store

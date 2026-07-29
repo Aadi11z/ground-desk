@@ -1,4 +1,5 @@
-PYTHON ?= ./venv/bin/python
+UV ?= uv
+PYTHON ?= $(UV) run python
 HOST ?= 127.0.0.1
 PORT ?= 8000
 OFFLINE_DATA_DIR ?= data/local-offline
@@ -7,9 +8,9 @@ LOCAL_ADMIN_KEY ?= local-admin-secret
 
 .DEFAULT_GOAL := local
 
-.PHONY: local local-fresh local-gemini local-gemini-fresh check-local-venv
+.PHONY: local local-fresh local-gemini local-gemini-fresh sync dev lint format test
 
-local: check-local-venv
+local: sync
 	@echo "Starting GroundDesk locally with offline providers at http://$(HOST):$(PORT)/"
 	@echo "Admin uploads: open /docs and use X-Admin-API-Key: $(LOCAL_ADMIN_KEY)"
 	AUTH_MODE=demo \
@@ -25,12 +26,12 @@ local: check-local-venv
 	ADMIN_API_KEY=$(LOCAL_ADMIN_KEY) \
 	$(PYTHON) -m uvicorn app.main:app --reload --host $(HOST) --port $(PORT)
 
-local-fresh: check-local-venv
+local-fresh: sync
 	@echo "Removing the offline local index and re-ingesting sample_corpus/ on startup."
 	rm -rf "$(OFFLINE_DATA_DIR)"
 	$(MAKE) local HOST="$(HOST)" PORT="$(PORT)" LOCAL_ADMIN_KEY="$(LOCAL_ADMIN_KEY)"
 
-local-gemini: check-local-venv
+local-gemini: sync
 	@echo "Starting GroundDesk locally with Gemini at http://$(HOST):$(PORT)/"
 	@echo "GEMINI_API_KEY must be set in .env or the shell."
 	@echo "Admin uploads: open /docs and use X-Admin-API-Key: $(LOCAL_ADMIN_KEY)"
@@ -51,22 +52,23 @@ local-gemini: check-local-venv
 	ADMIN_API_KEY=$(LOCAL_ADMIN_KEY) \
 	$(PYTHON) -m uvicorn app.main:app --reload --host $(HOST) --port $(PORT)
 
-local-gemini-fresh: check-local-venv
+local-gemini-fresh: sync
 	@echo "Removing the Gemini local index and re-ingesting sample_corpus/ on startup."
 	rm -rf "$(GEMINI_DATA_DIR)"
 	$(MAKE) local-gemini HOST="$(HOST)" PORT="$(PORT)" LOCAL_ADMIN_KEY="$(LOCAL_ADMIN_KEY)"
 
-check-local-venv:
-	@test -x "$(PYTHON)" || (echo "Missing $(PYTHON). Run: python -m venv venv && ./venv/bin/python -m pip install -r requirements.txt" && exit 1)
+sync:
+	@command -v "$(UV)" >/dev/null 2>&1 || (echo "uv is required. Install it from https://docs.astral.sh/uv/" && exit 1)
+	$(UV) sync --locked
 
-dev: 
-	uv run uvicorn app.main:app --reload
+dev: sync
+	$(UV) run --locked uvicorn app.main:app --reload
 
-lint:
-	uv run ruff check .
+lint: sync
+	$(UV) run --locked ruff check .
 
-format:
-	uv run ruff format .
+format: sync
+	$(UV) run --locked ruff format .
 
-test: 
-	uv run pytest -q
+test: sync
+	$(UV) run --locked pytest -q

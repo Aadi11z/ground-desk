@@ -5,11 +5,8 @@ GroundDesk is a B2B product built for organization's and their internal teams fo
 ## Quickstart
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pytest -q
+uv sync --locked
+uv run --locked pytest -q
 
 # Zero-cloud local product demo: local vectors, template answers, admin upload enabled.
 make
@@ -199,7 +196,7 @@ reachable, which makes a missed migration visible during deployment validation.
 After applying the migrations, verify a Supabase PostgreSQL connection with:
 
 ```bash
-./venv/bin/python scripts/check_database_setup.py \
+uv run --locked python scripts/check_database_setup.py \
   --workspace-id demo \
   --workspace-name "GroundDesk Demo"
 ```
@@ -268,13 +265,13 @@ BEIR NFCorpus test set in an isolated local index.
 Fast baseline with no API cost or model download:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py --download nfcorpus --modes sparse,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --output results/nfcorpus_fast.json --report results/nfcorpus_fast.md
+uv run --locked python scripts/run_retrieval_benchmark.py --download nfcorpus --modes sparse,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --output results/nfcorpus_fast.json --report results/nfcorpus_fast.md
 ```
 
 Stronger semantic comparison using a local embedding model:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --modes dense,hybrid,adaptive --embedding-provider sentence-transformers --embedding-model BAAI/bge-small-en-v1.5 --output results/nfcorpus_bge.json --report benchmarks/reports/nfcorpus_bge.md --publish-summary benchmarks/reports/nfcorpus_bge.json
+uv run --locked python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --modes dense,hybrid,adaptive --embedding-provider sentence-transformers --embedding-model BAAI/bge-small-en-v1.5 --output results/nfcorpus_bge.json --report benchmarks/reports/nfcorpus_bge.md --publish-summary benchmarks/reports/nfcorpus_bge.json
 ```
 
 The first run downloads the public NFCorpus archive; the second may download
@@ -300,7 +297,7 @@ not improve the labelled benchmark.
 For a quota-controlled verification of the live Gemini embedding path:
 
 ```bash
-./venv/bin/python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --sample-queries 5 --sample-corpus-documents 150 --sample-seed 42 --modes dense,hybrid,adaptive --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --allow-gemini-corpus-embedding --output results/nfcorpus_gemini_slice.json --report benchmarks/reports/nfcorpus_gemini_slice.md --publish-summary benchmarks/reports/nfcorpus_gemini_slice.json
+uv run --locked python scripts/run_retrieval_benchmark.py --dataset-dir benchmarks/data/nfcorpus --sample-queries 5 --sample-corpus-documents 150 --sample-seed 42 --modes dense,hybrid,adaptive --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --allow-gemini-corpus-embedding --output results/nfcorpus_gemini_slice.json --report benchmarks/reports/nfcorpus_gemini_slice.md --publish-summary benchmarks/reports/nfcorpus_gemini_slice.json
 ```
 
 This slice verifies Gemini Embedding 2 and MRL-vector integration under free-tier
@@ -322,7 +319,7 @@ conversation context.
 Run the deterministic offline evaluation without API cost:
 
 ```bash
-./venv/bin/python scripts/run_support_evaluation.py --modes dense,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --generation-provider template --top-k 3 --output results/grounddesk_support_hashing.json --report results/grounddesk_support_hashing.md
+uv run --locked python scripts/run_support_evaluation.py --modes dense,hybrid,adaptive --embedding-provider hashing --embedding-model hashing --generation-provider template --top-k 3 --output results/grounddesk_support_hashing.json --report results/grounddesk_support_hashing.md
 ```
 
 The pre-gate hashing/template run exposed that hybrid retrieval escalated only
@@ -339,7 +336,7 @@ because its top retrieved document is wrong.
 After manually reviewing the cases, run the Gemini path:
 
 ```bash
-./venv/bin/python scripts/run_support_evaluation.py \
+uv run --locked python scripts/run_support_evaluation.py \
   --modes hybrid \
   --embedding-provider gemini \
   --embedding-model gemini-embedding-2 \
@@ -377,7 +374,7 @@ After the default hybrid run is complete, the optional structured planner can
 be evaluated separately. It adds one Gemini request for each evaluated query:
 
 ```bash
-./venv/bin/python scripts/run_support_evaluation.py --modes planned --query-planner-provider gemini --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --generation-provider template --allow-provider-api-calls --output results/grounddesk_support_planned.json --report results/grounddesk_support_planned.md
+uv run --locked python scripts/run_support_evaluation.py --modes planned --query-planner-provider gemini --embedding-provider gemini --embedding-model gemini-embedding-2 --embedding-dimensions 768,1536,3072 --generation-provider template --allow-provider-api-calls --output results/grounddesk_support_planned.json --report results/grounddesk_support_planned.md
 ```
 
 Do not deploy planned retrieval unless its labelled results improve over the
@@ -431,8 +428,7 @@ presentation/           Generated interview/demo slide deck
 Generate the black-and-white interview deck:
 
 ```bash
-./venv/bin/python -m pip install python-pptx
-./venv/bin/python scripts/create_demo_deck.py
+uv run --with python-pptx python scripts/create_demo_deck.py
 ```
 
 ## Deploy
@@ -444,4 +440,5 @@ docker build -t ground-desk .
 docker run --rm -p 8080:8080 ground-desk
 ```
 
-See [PLAN.md](PLAN.md) for the planned Cloud Run and Cloudflare Pages deployment.
+See the [production architecture plan](docs/PLAN.md) for the planned Cloud Run
+and Cloudflare Pages deployment.
