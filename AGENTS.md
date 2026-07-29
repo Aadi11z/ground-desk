@@ -21,7 +21,7 @@ Preserve these behaviors:
 
 | Area | Direction |
 | --- | --- |
-| Runtime/tooling | Current Python 3.14, root `uv` project/lock, Ruff, pytest; the plan's Python 3.13 target needs a separate compatibility decision. |
+| Runtime/tooling | Python 3.14, root `uv` project/lock, Ruff, pytest. |
 | API/config | FastAPI, Uvicorn, Pydantic v2, `pydantic-settings` |
 | Data | SQLAlchemy 2, Alembic, psycopg 3, Supabase Postgres |
 | Identity/assets | Supabase Auth and private Supabase Storage |
