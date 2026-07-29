@@ -7,16 +7,16 @@ GroundDesk-compatible index, and evaluates ranked document retrieval.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
-from pathlib import Path
 import random
+from collections import defaultdict
+from collections.abc import Callable, Iterable
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from time import perf_counter
-from typing import Callable, Iterable
 
 import numpy as np
 
@@ -25,7 +25,11 @@ from app.rag.ingestion.chunking import chunk_text
 from app.rag.ingestion.quality import filter_chunks
 from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.retriever import HybridRetriever
-from app.rag.retrieval.vector_store import ChunkRecord, DocumentManifest, LocalVectorStore
+from app.rag.retrieval.vector_store import (
+    ChunkRecord,
+    DocumentManifest,
+    LocalVectorStore,
+)
 
 
 @dataclass(frozen=True)
@@ -141,7 +145,9 @@ def select_labelled_slice(
             document_id: dataset.documents[document_id]
             for document_id in sorted(selected_document_ids)
         },
-        queries={query_id: dataset.queries[query_id] for query_id in selected_query_ids},
+        queries={
+            query_id: dataset.queries[query_id] for query_id in selected_query_ids
+        },
         qrels={query_id: dataset.qrels[query_id] for query_id in selected_query_ids},
         split=dataset.split,
         selection={
@@ -180,7 +186,7 @@ def build_benchmark_index(
 
     records: list[ChunkRecord] = []
     manifests: dict[str, DocumentManifest] = {}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     for document in dataset.documents.values():
         text = document.text.strip() or document.title
         candidate_chunks = chunk_text(text, document.document_id)
@@ -242,7 +248,9 @@ def build_benchmark_index(
         for name, matrix in batch.vectors.items():
             vector_blocks[name].append(matrix)
         if progress_callback is not None:
-            progress_callback(min(start + len(batch_records), len(records)), len(records))
+            progress_callback(
+                min(start + len(batch_records), len(records)), len(records)
+            )
 
     store.records = records
     store.documents = manifests
@@ -307,10 +315,14 @@ def evaluate_retrieval_strategy(
         ranked_chunks = retriever.retrieve(query, query_vectors, top_k=max_k)
         latencies_ms.append((perf_counter() - started) * 1000)
         ranked_document_ids = _distinct_document_ids(ranked_chunks)
-        relevance = [relevant.get(document_id, 0) for document_id in ranked_document_ids]
+        relevance = [
+            relevant.get(document_id, 0) for document_id in ranked_document_ids
+        ]
 
         for k in cutoffs:
-            found = sum(1 for document_id in ranked_document_ids[:k] if document_id in relevant)
+            found = sum(
+                1 for document_id in ranked_document_ids[:k] if document_id in relevant
+            )
             recalls[k].append(found / len(relevant) if relevant else 0.0)
             successes[k].append(1.0 if found else 0.0)
         first_relevant_rank = next(
@@ -377,7 +389,7 @@ def build_benchmark_report(
     query_limit: int | None = None,
 ) -> dict:
     return {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "dataset": {
             "name": dataset.name,
             "split": dataset.split,
@@ -511,7 +523,9 @@ def _average_precision_at_k(
     return precision_sum / denominator if denominator else 0.0
 
 
-def _ndcg_at_k(ranked_relevance: list[int], ideal_relevance: list[int], k: int) -> float:
+def _ndcg_at_k(
+    ranked_relevance: list[int], ideal_relevance: list[int], k: int
+) -> float:
     def dcg(values: list[int]) -> float:
         return sum(
             ((2**grade) - 1) / math.log2(rank + 1)
@@ -535,6 +549,4 @@ def _percentile(values: list[float], percentile: int) -> float:
     if lower == upper:
         return float(sorted_values[lower])
     weight = position - lower
-    return float(
-        sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
-    )
+    return float(sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight)

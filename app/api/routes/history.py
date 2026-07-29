@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+
 from app.api.dependencies import authenticated_access_context, get_product_repository
 from app.core.auth import AccessContext
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
 import ipaddress
 import re
 import socket
+from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
 

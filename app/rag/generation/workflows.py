@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.core.models import ChatRequest
+
 from .agent import SupportAgent
 
 

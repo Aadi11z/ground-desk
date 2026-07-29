@@ -42,9 +42,7 @@ def synthetic_evals(_: None = Depends(require_admin), store=Depends(get_vector_s
 
 
 @router.post("/variants")
-def retrieval_variant_evals(
-    _: None = Depends(require_admin), agent=Depends(get_agent)
-):
+def retrieval_variant_evals(_: None = Depends(require_admin), agent=Depends(get_agent)):
     return compare_retrieval_variants(agent)
 
 

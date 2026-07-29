@@ -14,7 +14,6 @@ from .lexical import BM25Index
 from .rerank import create_final_reranker
 from .vector_store import SearchResult, VectorStoreBackend
 
-
 RetrievalMode = Literal["dense", "sparse", "hybrid"]
 
 

@@ -1,9 +1,9 @@
 """Run product-specific GroundDesk evidence and escalation evaluation.
 
 Examples:
-    ./venv/bin/python scripts/run_support_evaluation.py
+    uv run --locked python scripts/run_support_evaluation.py
 
-    ./venv/bin/python scripts/run_support_evaluation.py \
+    uv run --locked python scripts/run_support_evaluation.py \
       --embedding-provider gemini --embedding-model gemini-embedding-2 \
       --embedding-dimensions 768,1536,3072 --generation-provider gemini \
       --allow-provider-api-calls
@@ -12,13 +12,12 @@ Examples:
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sys
 import tempfile
-
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -77,7 +76,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--query-planner-model", default="gemini-2.5-flash")
     parser.add_argument("--gemini-generation-max-attempts", type=int, default=5)
-    parser.add_argument("--gemini-generation-retry-base-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--gemini-generation-retry-base-seconds", type=float, default=2.0
+    )
     parser.add_argument(
         "--gemini-generation-request-delay-seconds",
         type=float,
@@ -91,7 +92,9 @@ def parse_args() -> argparse.Namespace:
         help="Delay after Gemini embedding API requests during evaluation.",
     )
     parser.add_argument("--gemini-embedding-max-attempts", type=int, default=5)
-    parser.add_argument("--gemini-embedding-retry-base-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--gemini-embedding-retry-base-seconds", type=float, default=2.0
+    )
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--conversation-context-turns", type=int, default=4)
     parser.add_argument(
@@ -128,10 +131,14 @@ def main() -> None:
             "Gemini mode sends the demo corpus/questions to the provider and uses API "
             "quota. Re-run with --allow-provider-api-calls after confirming this is intended."
         )
-    modes = tuple(item.strip().lower() for item in args.modes.split(",") if item.strip())
+    modes = tuple(
+        item.strip().lower() for item in args.modes.split(",") if item.strip()
+    )
     invalid_modes = set(modes) - {"sparse", "dense", "hybrid", "adaptive", "planned"}
     if invalid_modes:
-        raise SystemExit(f"Unsupported retrieval modes: {', '.join(sorted(invalid_modes))}")
+        raise SystemExit(
+            f"Unsupported retrieval modes: {', '.join(sorted(invalid_modes))}"
+        )
     if "planned" in modes and args.query_planner_provider != "gemini":
         raise SystemExit(
             "The planned retrieval mode requires --query-planner-provider gemini. "
@@ -214,9 +221,7 @@ def main() -> None:
         )
         if not documents:
             raise SystemExit(f"No source documents found under {args.sample_dir}.")
-        if (
-            args.embedding_provider == "gemini" and embeddings.backend != "gemini"
-        ):
+        if args.embedding_provider == "gemini" and embeddings.backend != "gemini":
             raise SystemExit(
                 "Gemini embedding backend was requested but unavailable; evaluation aborted."
             )
@@ -271,7 +276,7 @@ def main() -> None:
             runs.append(run)
 
     report = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "configuration": {
             "sample_dir": str(args.sample_dir),
             "embedding_provider": args.embedding_provider,
@@ -317,7 +322,9 @@ def main() -> None:
     print(f"Markdown report: {args.report}")
 
 
-def _checkpoint_signature(args, modes: tuple[str, ...], dimensions: tuple[int, ...]) -> dict:
+def _checkpoint_signature(
+    args, modes: tuple[str, ...], dimensions: tuple[int, ...]
+) -> dict:
     return {
         "dataset": str(args.dataset),
         "sample_dir": str(args.sample_dir),
@@ -338,8 +345,6 @@ def _checkpoint_signature(args, modes: tuple[str, ...], dimensions: tuple[int, .
         "gemini_generation_retry_base_seconds": args.gemini_generation_retry_base_seconds,
         "gemini_generation_request_delay_seconds": args.gemini_generation_request_delay_seconds,
         "gemini_embedding_request_delay_seconds": args.gemini_embedding_request_delay_seconds,
-        "gemini_embedding_max_attempts": args.gemini_embedding_max_attempts,
-        "gemini_embedding_retry_base_seconds": args.gemini_embedding_retry_base_seconds,
     }
 
 

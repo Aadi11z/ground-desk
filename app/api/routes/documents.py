@@ -1,5 +1,5 @@
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 
@@ -8,13 +8,13 @@ from app.api.dependencies import (
     _workspace_id,
     get_ingestion_service,
     get_vector_store,
-    require_admin,
     normal_access_context,
+    require_admin,
 )
 from app.core.auth import AccessContext
 from app.core.config import settings
 from app.core.models import DocumentIngestResponse, UrlIngestRequest
-from app.core.workspace import metadata_matches_workspace, normalize_workspace_id
+from app.core.workspace import normalize_workspace_id
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -127,4 +127,7 @@ def delete_document(
 ):
     workspace_id = _workspace_id(x_workspace_id)
     _ensure_workspace_document(document_id, workspace_id, store=store)
-    return {"document_id": document_id, "chunks_deleted": store.delete_document(document_id)}
+    return {
+        "document_id": document_id,
+        "chunks_deleted": store.delete_document(document_id),
+    }

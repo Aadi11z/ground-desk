@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
 import math
 import re
+from collections import Counter
+from dataclasses import dataclass
 
 from .vector_store import ChunkRecord, SearchResult
-
 
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+(?:[._:/-][a-z0-9]+)*", re.IGNORECASE)
 

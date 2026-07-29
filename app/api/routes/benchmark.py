@@ -1,5 +1,7 @@
-from fastapi import APIRouter
 import json
+
+from fastapi import APIRouter
+
 from app.core.config import settings
 
 router = APIRouter(prefix="/benchmark", tags=["benchmark"])
@@ -16,7 +18,7 @@ def benchmark_summary():
     for path in report_paths:
         try:
             report = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
+        except OSError, ValueError, TypeError:
             continue
         summaries.append(
             {

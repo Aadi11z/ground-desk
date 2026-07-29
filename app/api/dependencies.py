@@ -2,13 +2,13 @@ from fastapi import Header, HTTPException
 
 from app.core.auth import AccessContext, AccessController, AccessError
 from app.core.config import settings
+from app.core.persistence import create_product_repository
 from app.core.workspace import metadata_matches_workspace, normalize_workspace_id
+from app.rag.generation.agent import SupportAgent
+from app.rag.generation.workflows import SupportWorkflowService
 from app.rag.ingestion.service import IngestionService
 from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.factory import create_vector_store
-from app.rag.generation.agent import SupportAgent
-from app.rag.generation.workflows import SupportWorkflowService
-from app.core.persistence import create_product_repository
 
 embedding_model = EmbeddingModel(
     settings.embedding_model,

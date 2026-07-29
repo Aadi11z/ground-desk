@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from .retrieval import run_retrieval_evals
 from app.rag.retrieval.retriever import HybridRetriever
+
+from .retrieval import run_retrieval_evals
 
 
 def compare_retrieval_variants(agent) -> dict:

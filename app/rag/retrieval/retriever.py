@@ -8,12 +8,12 @@ from typing import Literal
 import numpy as np
 
 from app.core.config import Settings
+
 from .adaptive import AdaptiveQueryPlanner, RetrievalPlan, StructuredQueryPlanner
 from .compression import compress_results
 from .lexical import BM25Index
 from .rerank import create_final_reranker
 from .vector_store import SearchResult, VectorStoreBackend
-
 
 RetrievalMode = Literal["dense", "sparse", "hybrid"]
 

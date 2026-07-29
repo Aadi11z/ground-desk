@@ -7,7 +7,6 @@ import re
 from .lexical import tokenize
 from .vector_store import SearchResult
 
-
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 

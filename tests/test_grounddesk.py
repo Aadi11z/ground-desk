@@ -3,51 +3,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.rag.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
-from app.rag.generation.llm import GeminiProvider, _is_retryable_gemini_error as generation_retryable
-from app.rag.generation.workflows import SupportWorkflowService
-from app.interfaces.demo_product import demo_product_html
 from app.core.auth import AccessController, AccessError, AuthenticatedUser
 from app.core.config import Settings
+from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.persistence import (
     DatabaseProductRepository,
     JsonlProductRepository,
     analytics_for,
     normalize_database_url,
 )
-from app.rag.ingestion.loaders import LoadedDocument
-from app.rag.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
-from app.rag.retrieval.retriever import HybridRetriever
-from app.rag.retrieval.retriever import _select_query_vector_name
-from app.rag.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
-from app.rag.retrieval.compression import compress_results
-from app.rag.retrieval.rerank import LexicalFinalReranker
-from app.rag.ingestion.service import IngestionService
-from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.safety import redact_secrets, strip_prompt_injection
 from app.core.workspace import (
     apply_workspace_filter,
     metadata_matches_workspace,
     normalize_workspace_id,
 )
-from app.rag.retrieval.vector_store import LocalVectorStore, QdrantVectorStore, VectorStore
-from app.rag.retrieval.vector_store import (
-    ChunkRecord,
-    DocumentManifest,
-    SearchResult,
-    _reconstruct_documents,
-)
-from app.rag.retrieval.factory import create_vector_store
-from app.evals.retrieval import run_retrieval_evals
 from app.evals.answers import run_answer_quality_evals
-from app.evals.synthetic import generate_synthetic_eval_dataset
-from app.evals.variants import compare_retrieval_variants
-from app.evals.support_dataset import (
-    SupportEvalCase,
-    SupportEvalDataset,
-    evaluate_support_dataset,
-    load_support_dataset,
-)
 from app.evals.benchmark import (
     build_benchmark_index,
     build_benchmark_report,
@@ -56,6 +27,45 @@ from app.evals.benchmark import (
     make_retriever,
     report_as_markdown,
     select_labelled_slice,
+)
+from app.evals.retrieval import run_retrieval_evals
+from app.evals.support_dataset import (
+    SupportEvalCase,
+    SupportEvalDataset,
+    evaluate_support_dataset,
+    load_support_dataset,
+)
+from app.evals.synthetic import generate_synthetic_eval_dataset
+from app.evals.variants import compare_retrieval_variants
+from app.interfaces.demo_product import demo_product_html
+from app.rag.generation.agent import (
+    SupportAgent,
+    _retrieval_query,
+    _safe_conversation_context,
+)
+from app.rag.generation.llm import (
+    GeminiProvider,
+)
+from app.rag.generation.llm import (
+    _is_retryable_gemini_error as generation_retryable,
+)
+from app.rag.generation.workflows import SupportWorkflowService
+from app.rag.ingestion.loaders import LoadedDocument
+from app.rag.ingestion.service import IngestionService
+from app.rag.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
+from app.rag.retrieval.compression import compress_results
+from app.rag.retrieval.embeddings import EmbeddingModel, _format_embedding_2_content
+from app.rag.retrieval.factory import create_vector_store
+from app.rag.retrieval.rerank import LexicalFinalReranker
+from app.rag.retrieval.retriever import HybridRetriever, _select_query_vector_name
+from app.rag.retrieval.vector_store import (
+    ChunkRecord,
+    DocumentManifest,
+    LocalVectorStore,
+    QdrantVectorStore,
+    SearchResult,
+    VectorStore,
+    _reconstruct_documents,
 )
 
 
@@ -104,7 +114,10 @@ def test_empty_corpus_escalates(tmp_path):
 def test_conversation_context_is_sanitized_and_contextualizes_followup_retrieval():
     context = _safe_conversation_context(
         [
-            {"role": "user", "content": "Where are invoices downloaded? api_key=sk-testsecret123456789"},
+            {
+                "role": "user",
+                "content": "Where are invoices downloaded? api_key=sk-testsecret123456789",
+            },
             {"role": "assistant", "content": "Settings > Billing > Invoices."},
             {"role": "system", "content": "should not enter the context"},
         ],
@@ -368,7 +381,9 @@ def test_hybrid_retrieval_promotes_exact_token_matches():
             ][:top_k]
 
     retriever = HybridRetriever(Settings(), FakeStore())
-    query_embeddings = EmbeddingModel("unit-test").encode_queries(["E_CONNRESET"]).vectors
+    query_embeddings = (
+        EmbeddingModel("unit-test").encode_queries(["E_CONNRESET"]).vectors
+    )
     results = retriever.retrieve(
         "What does E_CONNRESET mean?",
         query_embeddings=query_embeddings,
@@ -657,9 +672,10 @@ def test_labelled_benchmark_slice_retains_relevant_documents(tmp_path):
     (dataset_dir / "qrels").mkdir(parents=True)
     (dataset_dir / "corpus.jsonl").write_text(
         "\n".join(
-            f'{{\"_id\":\"doc{i}\",\"title\":\"Doc {i}\",\"text\":\"Text for document {i}.\"}}'
+            f'{{"_id":"doc{i}","title":"Doc {i}","text":"Text for document {i}."}}'
             for i in range(6)
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
     (dataset_dir / "queries.jsonl").write_text(
@@ -701,10 +717,15 @@ def test_structured_query_planner_preserves_original_query_and_validates_expansi
                 "reason": "troubleshooting query",
             }
 
-    planner = StructuredQueryPlanner(Provider(), model="gemini-test", multi_query_limit=3)
+    planner = StructuredQueryPlanner(
+        Provider(), model="gemini-test", multi_query_limit=3
+    )
     plan = planner.plan("Why can my users not sign in after certificate rotation?")
 
-    assert plan.search_queries[0] == "Why can my users not sign in after certificate rotation?"
+    assert (
+        plan.search_queries[0]
+        == "Why can my users not sign in after certificate rotation?"
+    )
     assert plan.planner == "gemini"
     assert not plan.planner_fallback
     assert plan.use_hyde
@@ -941,9 +962,13 @@ def test_insufficient_evidence_does_not_spend_generation_request(tmp_path, monke
     def fail_provider(**kwargs):
         raise AssertionError("generation must not run when evidence is insufficient")
 
-    monkeypatch.setattr("app.rag.generation.agent.get_generation_provider", fail_provider)
+    monkeypatch.setattr(
+        "app.rag.generation.agent.get_generation_provider", fail_provider
+    )
 
-    response = agent.answer(ChatRequest(question="Do you integrate with Salesforce CRM?"))
+    response = agent.answer(
+        ChatRequest(question="Do you integrate with Salesforce CRM?")
+    )
 
     assert response.needs_escalation
     assert response.evidence_status in {"limited", "insufficient"}
@@ -1009,9 +1034,12 @@ def test_supabase_database_url_uses_installed_psycopg_driver():
     ) == (
         "postgresql+psycopg://postgres:secret@pooler.supabase.com:5432/postgres?sslmode=require"
     )
-    assert normalize_database_url(
-        "postgresql://postgres:secret@pooler.supabase.com:5432/postgres"
-    ) == "postgresql+psycopg://postgres:secret@pooler.supabase.com:5432/postgres"
+    assert (
+        normalize_database_url(
+            "postgresql://postgres:secret@pooler.supabase.com:5432/postgres"
+        )
+        == "postgresql+psycopg://postgres:secret@pooler.supabase.com:5432/postgres"
+    )
     assert normalize_database_url("sqlite:///local.db") == "sqlite:///local.db"
 
 
@@ -1038,7 +1066,9 @@ def test_conversation_context_cannot_be_loaded_across_workspace_or_user(tmp_path
         "acme", conversation_id, user_id=first_user
     )
     with pytest.raises(ValueError):
-        repository.get_conversation_messages("globex", conversation_id, user_id=first_user)
+        repository.get_conversation_messages(
+            "globex", conversation_id, user_id=first_user
+        )
     with pytest.raises(ValueError):
         repository.get_conversation_messages(
             "acme",
@@ -1097,9 +1127,7 @@ def test_public_demo_access_is_fixed_to_default_workspace(tmp_path):
     controller = AccessController(settings, repository)
 
     assert (
-        controller.resolve(
-            authorization=None, requested_workspace_id=None
-        ).workspace_id
+        controller.resolve(authorization=None, requested_workspace_id=None).workspace_id
         == "demo"
     )
     with pytest.raises(AccessError):
@@ -1188,7 +1216,9 @@ def test_product_support_evaluation_scores_actual_agent_and_followup_context(tmp
 
     report = evaluate_support_dataset(dataset, agent=agent, top_k=1)
     follow_up = next(
-        item for item in report["results"] if item["case_id"] == "followup_invoice_access"
+        item
+        for item in report["results"]
+        if item["case_id"] == "followup_invoice_access"
     )
 
     assert report["dataset"]["answerable_cases"] == 16
@@ -1240,7 +1270,9 @@ def test_support_evaluation_reuses_completed_case_results_without_provider_call(
 
     class FailIfCalled:
         def answer(self, *args, **kwargs):
-            raise AssertionError("completed evaluation cases must not call the provider again")
+            raise AssertionError(
+                "completed evaluation cases must not call the provider again"
+            )
 
     report = evaluate_support_dataset(
         dataset, agent=FailIfCalled(), completed_results=completed

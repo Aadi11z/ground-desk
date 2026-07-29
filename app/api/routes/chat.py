@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.models import ChatRequest
-from app.core.auth import AccessContext
+
 from app.api.dependencies import (
     get_agent,
-    normal_access_context,
     get_product_repository,
+    normal_access_context,
 )
-from app.core.workspace import apply_workspace_filter
+from app.core.auth import AccessContext
 from app.core.config import settings
+from app.core.models import ChatRequest
+from app.core.workspace import apply_workspace_filter
 
 router = APIRouter(tags=["chat"])
 

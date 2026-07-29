@@ -8,11 +8,11 @@ retrievable vector payloads.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
-import uuid
 
 from .models import ChatRequest, ChatResponse, FeedbackRequest
 
@@ -114,9 +114,7 @@ class JsonlProductRepository:
                 "conversation_id": conversation_id,
                 "question": request.question,
                 "answer": response.answer,
-                "citations": [
-                    citation.model_dump() for citation in response.citations
-                ],
+                "citations": [citation.model_dump() for citation in response.citations],
                 "suggested_ticket_reply": response.suggested_ticket_reply,
                 "trace_id": response.trace_id,
                 "needs_escalation": response.needs_escalation,
@@ -372,7 +370,9 @@ class DatabaseProductRepository:
         from sqlalchemy import select
 
         with self.engine.connect() as connection:
-            connection.execute(select(self.workspace_members.c.user_id).limit(1)).first()
+            connection.execute(
+                select(self.workspace_members.c.user_id).limit(1)
+            ).first()
 
     def record_answer(
         self,
@@ -404,9 +404,7 @@ class DatabaseProductRepository:
             conversation = connection.execute(
                 select(
                     self.conversations.c.workspace_id, self.conversations.c.user_id
-                ).where(
-                    self.conversations.c.id == conversation_id
-                )
+                ).where(self.conversations.c.id == conversation_id)
             ).first()
             if conversation is None:
                 connection.execute(
@@ -520,8 +518,7 @@ class DatabaseProductRepository:
             if user_id is not None:
                 statement = statement.where(self.answer_traces.c.user_id == user_id)
             rows = connection.execute(
-                statement
-                .order_by(self.answer_traces.c.created_at.desc())
+                statement.order_by(self.answer_traces.c.created_at.desc())
             ).mappings()
             return [_jsonable(dict(row)) for row in rows]
 
@@ -675,7 +672,7 @@ def _id(prefix: str) -> str:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _utcnow_iso() -> str:

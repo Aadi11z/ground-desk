@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
-from .chunking import chunk_sections
 from ..core.config import Settings
-from .loaders import LoadedDocument, LoadedSection, load_path, load_url
+from ..core.models import DocumentRecord
 from ..retrieval.embeddings import EmbeddingModel
+from ..retrieval.vector_store import ChunkRecord, DocumentManifest, VectorStoreBackend
+from .chunking import chunk_sections
+from .loaders import LoadedDocument, LoadedSection, load_path, load_url
 from .quality import assess_sections, build_report, filter_chunks
 from .storage import LocalObjectStore
-from ..core.models import DocumentRecord
-from ..retrieval.vector_store import ChunkRecord, DocumentManifest, VectorStoreBackend
 
 
 class IngestionService:
@@ -159,7 +159,7 @@ class IngestionService:
             source=loaded.source,
             original_filename=loaded.original_filename,
             chunks_indexed=len(records),
-            ingested_at=datetime.now(timezone.utc).isoformat(),
+            ingested_at=datetime.now(UTC).isoformat(),
             status="rejected"
             if quality_report.rejected
             else ("indexed_with_warnings" if quality_report.warnings else "indexed"),

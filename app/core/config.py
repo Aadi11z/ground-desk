@@ -1,10 +1,10 @@
 from __future__ import annotations
+
+import os
 from dataclasses import dataclass
 from pathlib import Path
-import os
 
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
@@ -25,6 +25,7 @@ class Settings:
     │ benchmark output   │ BENCHMARK_REPORT_PATH                                             │
     └────────────────────┴───────────────────────────────────────────────────────────────────┘
     """
+
     app_name: str = "GroundDesk"
     data_dir: Path = Path(os.getenv("DATA_DIR", "data"))
     sample_dir: Path = Path(os.getenv("SAMPLE_DIR", "sample_corpus"))
@@ -62,9 +63,7 @@ class Settings:
     gemini_generation_request_delay_seconds: float = float(
         os.getenv("GEMINI_GENERATION_REQUEST_DELAY_SECONDS", "0.0")
     )
-    conversation_context_turns: int = int(
-        os.getenv("CONVERSATION_CONTEXT_TURNS", "4")
-    )
+    conversation_context_turns: int = int(os.getenv("CONVERSATION_CONTEXT_TURNS", "4"))
     auth_mode: str = os.getenv("AUTH_MODE", "demo")
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")

@@ -5,7 +5,6 @@ from app.api.router import router as api_router
 from app.api.routes.demo import router as demo_router
 from app.core.config import settings
 
-
 app = FastAPI(title=settings.app_name, version="0.2.0")
 app.include_router(api_router)
 app.include_router(demo_router)

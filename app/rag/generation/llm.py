@@ -133,10 +133,7 @@ class GeminiProvider:
                     self.sleep(self.request_delay_seconds)
                 return _parse_json_response(response.text or "{}")
             except Exception as exc:
-                if (
-                    not _is_retryable_gemini_error(exc)
-                    or attempt >= self.max_attempts
-                ):
+                if not _is_retryable_gemini_error(exc) or attempt >= self.max_attempts:
                     raise
                 fallback_delay = self.retry_base_seconds * (2 ** (attempt - 1))
                 self.sleep(_retry_delay_seconds(exc, fallback=fallback_delay))

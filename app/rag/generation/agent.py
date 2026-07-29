@@ -8,14 +8,14 @@ import uuid
 from dataclasses import dataclass
 
 from app.core.config import Settings
-from app.rag.retrieval.embeddings import EmbeddingModel
-from .llm import get_generation_provider
 from app.core.models import ChatRequest, ChatResponse, Citation
 from app.core.safety import redact_secrets, strip_prompt_injection
+from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.lexical import tokenize
 from app.rag.retrieval.retriever import HybridRetriever
 from app.rag.retrieval.vector_store import VectorStoreBackend
 
+from .llm import get_generation_provider
 
 SYSTEM_PROMPT = """You are GroundDesk, an evidence-grounded customer support agent.
 Use only the provided evidence. If the evidence is weak or missing, say that the
@@ -154,7 +154,9 @@ class SupportAgent:
             evidence_status=assessment.status,
             needs_escalation=needs_escalation,
             suggested_ticket_reply=str(ticket) if ticket else None,
-            generation_model=str(raw.get("_generation_model") or self.settings.generation_model),
+            generation_model=str(
+                raw.get("_generation_model") or self.settings.generation_model
+            ),
             trace_id=trace_id,
         )
 
@@ -201,10 +203,38 @@ def _metadata_value(
 
 
 _SUPPORT_STOPWORDS = {
-    "a", "an", "and", "are", "be", "can", "do", "does", "for", "from",
-    "how", "i", "if", "in", "is", "it", "me", "my", "of", "on", "or",
-    "should", "the", "that", "this", "to", "what", "when", "where", "who",
-    "with", "you",
+    "a",
+    "an",
+    "and",
+    "are",
+    "be",
+    "can",
+    "do",
+    "does",
+    "for",
+    "from",
+    "how",
+    "i",
+    "if",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "should",
+    "the",
+    "that",
+    "this",
+    "to",
+    "what",
+    "when",
+    "where",
+    "who",
+    "with",
+    "you",
 }
 
 
@@ -242,15 +272,14 @@ def _assess_evidence(
         return EvidenceAssessment(
             "clarification_needed", 0.0, "underspecified_without_context"
         )
-    query_terms = (
-        _substantive_terms(retrieval_query) if has_context else current_terms
-    )
+    query_terms = _substantive_terms(retrieval_query) if has_context else current_terms
     best_overlap = 0.0
     for result in results:
         evidence_terms = _substantive_terms(result.record.text)
         if query_terms:
             best_overlap = max(
-                best_overlap, len(query_terms.intersection(evidence_terms)) / len(query_terms)
+                best_overlap,
+                len(query_terms.intersection(evidence_terms)) / len(query_terms),
             )
     if best_overlap >= 0.34:
         return EvidenceAssessment("supported", best_overlap, "lexical_evidence_support")

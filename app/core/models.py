@@ -1,20 +1,20 @@
 """Shared request/response models.
-  ┌────────────────────────────┬────────────────────────────────────────────────────────────────────┐
-  │ Model                      │ Purpose                                                            │
-  ├────────────────────────────┼────────────────────────────────────────────────────────────────────┤
-  │ Citation                   │ Describes retrieved evidence returned with an answer               │
-  │ RetrievalFilters           │ Limits retrieval to selected documents, types, titles, or metadata │
-  │ ChatRequest                │ Input to the chat endpoint and support agent                       │
-  │ ChatResponse               │ Generated answer, citations, evidence status, escalation result    │
-  │ DocumentRecord             │ Full document ingestion/listing representation                     │
-  │ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
-  │ UrlIngestRequest           │ URL input payload                                                  │
-  │ HealthResponse             │ API health/status output                                           │
-  │ WorkflowRequest            │ Input for support workflow endpoints                               │
-  │ ConversationSummaryRequest │ Conversation messages supplied for summarization                   │
-  │ FeedbackRequest            │ User feedback payload                                              │
-  │ FeedbackResponse           │ Confirmation that feedback was accepted                            │
-  └────────────────────────────┴────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────┬────────────────────────────────────────────────────────────────────┐
+│ Model                      │ Purpose                                                            │
+├────────────────────────────┼────────────────────────────────────────────────────────────────────┤
+│ Citation                   │ Describes retrieved evidence returned with an answer               │
+│ RetrievalFilters           │ Limits retrieval to selected documents, types, titles, or metadata │
+│ ChatRequest                │ Input to the chat endpoint and support agent                       │
+│ ChatResponse               │ Generated answer, citations, evidence status, escalation result    │
+│ DocumentRecord             │ Full document ingestion/listing representation                     │
+│ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
+│ UrlIngestRequest           │ URL input payload                                                  │
+│ HealthResponse             │ API health/status output                                           │
+│ WorkflowRequest            │ Input for support workflow endpoints                               │
+│ ConversationSummaryRequest │ Conversation messages supplied for summarization                   │
+│ FeedbackRequest            │ User feedback payload                                              │
+│ FeedbackResponse           │ Confirmation that feedback was accepted                            │
+└────────────────────────────┴────────────────────────────────────────────────────────────────────┘
 """
 
 from __future__ import annotations

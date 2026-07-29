@@ -8,11 +8,10 @@ authenticated mode.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sys
-
+from datetime import UTC, datetime
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -54,7 +53,9 @@ def main() -> None:
             "Set PERSISTENCE_BACKEND=database and DATABASE_URL before checking PostgreSQL."
         )
     if args.dev_auto_create and not settings.database_url.startswith("sqlite"):
-        raise SystemExit("--dev-auto-create is allowed only with a SQLite DATABASE_URL.")
+        raise SystemExit(
+            "--dev-auto-create is allowed only with a SQLite DATABASE_URL."
+        )
     repository = DatabaseProductRepository(
         settings.database_url, auto_create=args.dev_auto_create
     )
@@ -107,7 +108,7 @@ def _seed_workspace(
 ) -> None:
     from sqlalchemy import insert, select, update
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with repository.engine.begin() as connection:
         workspace = connection.execute(
             select(repository.workspaces.c.id).where(

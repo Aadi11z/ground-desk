@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import re
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .loaders import LoadedSection
 

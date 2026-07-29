@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.config import Settings
+
 from .vector_store import LocalVectorStore, QdrantVectorStore, VectorStoreBackend
 
 

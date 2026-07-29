@@ -1,10 +1,10 @@
 from fastapi import APIRouter
+
 from app.api.routes import (
     analytics,
     benchmark,
     chat,
     client_config,
-    demo,
     documents,
     evals,
     feedback,

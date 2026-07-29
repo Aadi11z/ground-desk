@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
+import uuid
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
-import uuid
 
 import numpy as np
 

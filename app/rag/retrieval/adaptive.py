@@ -8,10 +8,9 @@ hybrid search on any provider or validation failure.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Protocol
-
 
 EXACT_TOKEN_PATTERN = re.compile(
     r"(?:\b[A-Z]{2,}[_-][A-Z0-9_-]+\b|\b[A-Z]{2,}\d+[A-Z0-9_-]*\b|\b\d+\.\d+(?:\.\d+)?\b)"

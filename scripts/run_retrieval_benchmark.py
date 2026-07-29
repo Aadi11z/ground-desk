@@ -9,13 +9,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import sys
 import tempfile
-from urllib.request import urlopen
 import zipfile
-
+from pathlib import Path
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -31,7 +30,6 @@ from app.evals.benchmark import (  # noqa: E402
     select_labelled_slice,
 )
 from app.rag.retrieval.embeddings import EmbeddingModel  # noqa: E402
-
 
 BEIR_DOWNLOADS = {
     "nfcorpus": {
@@ -136,12 +134,18 @@ def main() -> None:
             "or use local sentence-transformers."
         )
 
-    modes = tuple(item.strip().lower() for item in args.modes.split(",") if item.strip())
+    modes = tuple(
+        item.strip().lower() for item in args.modes.split(",") if item.strip()
+    )
     invalid_modes = set(modes) - {"sparse", "dense", "hybrid", "adaptive"}
     if invalid_modes:
-        raise SystemExit(f"Unsupported retrieval modes: {', '.join(sorted(invalid_modes))}")
+        raise SystemExit(
+            f"Unsupported retrieval modes: {', '.join(sorted(invalid_modes))}"
+        )
     dimensions = tuple(
-        int(value.strip()) for value in args.embedding_dimensions.split(",") if value.strip()
+        int(value.strip())
+        for value in args.embedding_dimensions.split(",")
+        if value.strip()
     )
     dataset = load_beir_dataset(args.dataset_dir, split=args.split)
     if args.sample_queries:
@@ -182,7 +186,10 @@ def main() -> None:
                 "The requested sentence-transformers model did not load; refusing "
                 "to report a silent hashing fallback as a semantic benchmark."
             )
-        if args.embedding_provider == "gemini" and index_stats.embedding_backend != "gemini":
+        if (
+            args.embedding_provider == "gemini"
+            and index_stats.embedding_backend != "gemini"
+        ):
             raise SystemExit(
                 "The requested Gemini embedding backend is unavailable; benchmark aborted."
             )
@@ -259,7 +266,10 @@ def _download_beir_dataset(name: str, destination: Path) -> None:
     archive = destination.parent / f"{name}.zip"
     archive.parent.mkdir(parents=True, exist_ok=True)
     print(f"Downloading {name} from the BEIR public dataset host...")
-    with urlopen(specification["url"], timeout=120) as response, archive.open("wb") as target:
+    with (
+        urlopen(specification["url"], timeout=120) as response,
+        archive.open("wb") as target,
+    ):
         shutil.copyfileobj(response, target)
     digest = hashlib.md5(archive.read_bytes()).hexdigest()
     if digest != specification["md5"]:

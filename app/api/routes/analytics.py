@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Header
 
-from app.api.dependencies import get_product_repository, require_admin, _workspace_id
+from app.api.dependencies import _workspace_id, get_product_repository, require_admin
 from app.core.persistence import analytics_for
 
 router = APIRouter(tags=["analytics"])

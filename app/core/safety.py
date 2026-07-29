@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
     re.compile(

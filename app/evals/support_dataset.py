@@ -8,13 +8,17 @@ use bounded conversation context.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
 
 from app.core.models import ChatRequest
-from app.rag.generation.agent import SupportAgent, _retrieval_query, _safe_conversation_context
+from app.rag.generation.agent import (
+    SupportAgent,
+    _retrieval_query,
+    _safe_conversation_context,
+)
 
 
 @dataclass(frozen=True)
@@ -147,9 +151,7 @@ def evaluate_support_dataset(
             "answerable_non_escalation_accuracy": _rate(
                 answerable_results, "escalation_hit"
             ),
-            "no_answer_escalation_accuracy": _rate(
-                no_answer_results, "escalation_hit"
-            ),
+            "no_answer_escalation_accuracy": _rate(no_answer_results, "escalation_hit"),
             "follow_up_evidence_hit_rate": _rate(follow_up_results, "evidence_hit"),
             "follow_up_top_citation_accuracy": _rate(
                 follow_up_results, "top_citation_hit"
@@ -281,10 +283,14 @@ def _score_case(case: SupportEvalCase, response, *, retrieval_diagnostics=None) 
         "has_conversation_context": case.is_follow_up,
         "expected_titles": list(case.expected_titles),
         "citation_titles": citation_titles,
-        "evidence_hit": bool(expected.intersection(title.lower() for title in citation_titles))
+        "evidence_hit": bool(
+            expected.intersection(title.lower() for title in citation_titles)
+        )
         if expected
         else None,
-        "top_citation_hit": bool(citation_titles and citation_titles[0].lower() in expected)
+        "top_citation_hit": bool(
+            citation_titles and citation_titles[0].lower() in expected
+        )
         if expected
         else None,
         "citation_precision": (relevant_citations / len(citation_titles))
@@ -323,10 +329,14 @@ def _score_retrieval_only(
     expected = {title.lower() for title in case.expected_titles}
     return {
         "citation_titles": citation_titles,
-        "evidence_hit": bool(expected.intersection(title.lower() for title in citation_titles))
+        "evidence_hit": bool(
+            expected.intersection(title.lower() for title in citation_titles)
+        )
         if expected
         else None,
-        "top_citation_hit": bool(citation_titles and citation_titles[0].lower() in expected)
+        "top_citation_hit": bool(
+            citation_titles and citation_titles[0].lower() in expected
+        )
         if expected
         else None,
     }
