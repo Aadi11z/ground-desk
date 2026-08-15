@@ -8,55 +8,68 @@ GroundDesk is a B2B product built for organization's and their internal teams fo
 uv sync --locked
 uv run --locked pytest -q
 
-# Zero-cloud local product demo: local vectors, template answers, admin upload enabled.
-make
+# Zero-cloud local product: local vectors, template answers, runtime upload enabled.
+make run-local
 ```
 
-Open the demo:
+Open the product:
 
 ```text
 http://localhost:8000
 ```
 
-The app automatically indexes the bundled documents in `sample_corpus/` when no local index exists.
-The product UI is available at `http://localhost:8000`; OpenAPI documentation
-is available at `http://localhost:8000/docs`.
+The first screen is a login page. In local mode, select **Continue as Demo
+User** to enter the seeded Demo Workspace. The workspace starts
+empty: upload Markdown, TXT, or PDF documents in the Documents tab, select a
+document to read its extracted text, then ask questions in the Ask tab.
+`sample_corpus/` is retained only for tests and evaluations. OpenAPI
+documentation is available at `http://localhost:8000/docs`.
 
 ### One-Command Local Modes
 
 | Command | Purpose |
 | --- | --- |
-| `make` | Start the default offline local product demo. |
-| `make local` | Run without cloud services using local vector storage, hashing embeddings and deterministic answer generation. |
-| `make local-fresh` | Clear only the offline local index, then ingest all files currently in `sample_corpus/` again. |
-| `make local-gemini` | Run locally with local vector storage and actual Gemini embeddings/generation; reads `GEMINI_API_KEY` from `.env` or the shell. |
-| `make local-gemini-fresh` | Clear only the Gemini local index, then rebuild it from `sample_corpus/`. |
+| `make help` | List available local development commands. |
+| `make run-local` | Run without cloud services using local vector storage, hashing embeddings, and deterministic answer generation. |
+| `make run-gemini` | Run locally with Gemini embeddings/generation; reads `GEMINI_API_KEY` from `.env` or the shell. |
+| `make reset-local` | Delete offline local data, then start with an empty workspace. |
+| `make reset-gemini` | Delete Gemini local data, then start with an empty workspace. |
+| `make check` | Run Ruff linting, format checking, and the full test suite. |
 
 The offline and Gemini commands use separate index directories so vectors
-created by different embedding providers are never mixed. Both local modes
-bind only to `127.0.0.1` by default and enable local PDF upload at `/docs`
-using `X-Admin-API-Key: local-admin-secret`.
-
-To test a newly added PDF as part of the seeded local corpus:
-
-```bash
-cp /path/to/your-document.pdf sample_corpus/
-make local-fresh
-```
+created by different embedding providers are never mixed. Both modes bind only
+to `127.0.0.1` by default and persist the local Demo User, organization,
+workspace, memberships, conversations, and feedback in a SQLite database.
 
 To use Gemini locally:
 
 ```bash
 cp .env.example .env
 # edit .env and set GEMINI_API_KEY
-make local-gemini-fresh
+make run-gemini
 ```
 
-Set a different host, port or local admin key without editing the file:
+Set a different host or port without editing the file:
 
 ```bash
-make local PORT=8010 LOCAL_ADMIN_KEY=replace-this-value
+make run-local PORT=8010
 ```
+
+### Runtime Profiles
+
+GroundDesk uses one codebase with environment-specific adapters rather than
+separate product forks:
+
+| Profile | Command/configuration | Identity and data |
+| --- | --- | --- |
+| Offline development/demo | `make run-local` | Fixed local user, SQLite product data, local vectors, deterministic models |
+| Gemini development | `make run-gemini` | Fixed local user, separate SQLite/vector data, Gemini models |
+| Automated test | `make test` or `make check` | Isolated temporary stores and deterministic providers |
+| Hosted product | `APP_ENV=production`, `AUTH_MODE=supabase` | Supabase Auth, Supabase Postgres, and Qdrant; unsafe local fallbacks are rejected at startup |
+
+Build the deployable container with `docker build -t grounddesk .`; its runtime
+configuration is supplied through environment variables, so the same image can
+be promoted between hosted environments.
 
 ## Core Features
 
@@ -72,15 +85,16 @@ make local PORT=8010 LOCAL_ADMIN_KEY=replace-this-value
 - Higher-level support workflows: escalation notes, summaries, FAQ generation, knowledge-gap detection, and support-article suggestions.
 - Synthetic eval-data generation plus retrieval/answer-quality metrics.
 - BEIR/qrels benchmark runner that reports retrieval Recall, MRR, nDCG, MAP, no-hit rate, and latency on labelled datasets.
-- PostgreSQL-compatible conversation, answer-trace, and feedback persistence,
-  with JSONL fallback for zero-setup local demonstrations.
+- PostgreSQL-compatible profile, organization, workspace, membership,
+  conversation, answer-trace, and feedback persistence, with JSONL fallback
+  for limited compatibility use.
 - Bounded multi-turn context for continued threads, with prior conversation
   separated from factual retrieved evidence.
-- Optional Supabase Auth-backed workspace membership enforcement; anonymous
-  portfolio-demo users are confined to the fixed `demo` workspace.
+- Demo User login for local development and Supabase Auth-backed workspace
+  membership enforcement for hosted environments.
 - Gemini generation using the server-side `GEMINI_API_KEY`, with a configurable
   Flash-Lite fallback for primary-model quota or availability failures.
-- Workspace-scoped retrieval enforced from public-demo scope or authenticated
+- Workspace-scoped retrieval enforced from local-demo scope or authenticated
   Supabase workspace membership.
 - Disabled-by-default management endpoints; temporary API-key access is
   available for local administration until proper authentication is added.
@@ -97,9 +111,12 @@ make local PORT=8010 LOCAL_ADMIN_KEY=replace-this-value
 
 ```text
 GET    /api/health
-GET    /api/benchmark/summary
 GET    /api/client-config
+POST   /api/auth/demo-session
+GET    /api/me
+POST   /api/onboarding
 GET    /api/documents
+GET    /api/documents/{document_id}/preview
 POST   /api/documents
 PUT    /api/documents/{document_id}
 POST   /api/documents/url
@@ -123,7 +140,6 @@ GET    /api/history
 GET    /api/me/workspaces
 GET    /api/analytics
 GET    /
-GET    /app
 ```
 
 Example:
@@ -131,6 +147,7 @@ Example:
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer grounddesk-demo-session" \
   -H "X-Workspace-ID: demo" \
   -d '{
     "question": "How long do password reset emails take?",
@@ -142,9 +159,23 @@ curl -X POST http://localhost:8000/api/chat \
 Management endpoints are disabled when `ADMIN_API_KEY` is unset. For local
 maintenance only, set it and send `X-Admin-API-Key` on management requests.
 
-## Interaction Persistence
+## Database And Persistence
 
-The default local setup continues to write interaction state to JSONL:
+The browser never connects directly to the product tables. It sends a Supabase
+access token to FastAPI; FastAPI validates the token, looks up the user's active
+workspace membership, derives the workspace scope, and then calls the database
+repository. This keeps company isolation in backend authorization instead of
+trusting a browser-provided workspace ID.
+
+Postgres is the production source of truth for profiles, organizations,
+workspaces, memberships, conversations, answer traces, and feedback. Supabase
+Auth owns passwords and login sessions. Qdrant stores rebuildable retrieval
+vectors, while document bytes remain local only until the planned private
+Supabase Storage migration is implemented.
+
+The `make local` setup uses SQLite so the Demo User profile and workspace are
+persisted along with interaction state. The JSONL adapter remains available for
+minimal compatibility runs:
 
 ```dotenv
 PERSISTENCE_BACKEND=jsonl
@@ -154,25 +185,38 @@ CHAT_HISTORY_PATH=data/chat_history.jsonl
 
 For a durable hosted implementation, use PostgreSQL or Supabase PostgreSQL:
 
-1. Apply all three SQL migrations in order:
-
-```text
-migrations/0001_product_interactions.sql
-migrations/0002_auth_workspace_membership.sql
-migrations/0003_evidence_status.sql
-```
-
-   `0002` adds the `user_id` ownership columns used by conversation history,
-   feedback and authenticated workspace mode. In Supabase, run it even for the
-   simple demo database path so the deployed code and schema match.
-
-2. Set server-side deployment variables:
+1. Set server-side deployment variables:
 
 ```dotenv
 PERSISTENCE_BACKEND=database
-DATABASE_URL=postgresql+psycopg://<user>:<password>@<host>:5432/<database>
+# Pooled application URL (Supavisor transaction mode for Cloud Run).
+DATABASE_URL=postgresql+psycopg://<user>:<password>@<pooler-host>:6543/<database>
 DATABASE_AUTO_CREATE=false
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=0
+DATABASE_POOL_TIMEOUT_SECONDS=5
+DATABASE_POOL_RECYCLE_SECONDS=300
+DATABASE_PREPARED_STATEMENTS=false
 ```
+
+The API owns one bounded SQLAlchemy engine per container and creates one session
+per request. Repository operations use short transactions so database
+connections are returned before retrieval or model generation waits. Bound
+Cloud Run maximum instances so `max instances × (pool size + max overflow)`
+stays within the database connection budget.
+
+2. For a new database, apply the reviewed Alembic baseline with a direct/admin
+   URL available only to the migration job:
+
+```bash
+DATABASE_MIGRATION_URL=postgresql+psycopg://... uv run --locked alembic upgrade head
+```
+
+   For an existing database created before Alembic, take a backup, verify the
+   schema, then run `uv run --locked alembic stamp 20260807_01`, followed by
+   `uv run --locked alembic upgrade head`. See
+   [`alembic/README.md`](alembic/README.md); do not run the baseline upgrade
+   directly on a pre-Alembic database.
 
 The database path now persists:
 
@@ -188,11 +232,12 @@ prior stored turns under the active workspace/user boundary. Previous user
 questions contextualize retrieval; sanitized prior turns are supplied to
 Gemini as conversation context explicitly marked as non-evidence.
 Configure the bound with `CONVERSATION_CONTEXT_TURNS` (default `4`).
-The default deployed portfolio mode is intentionally anonymous and fixed to
-the `demo` workspace; callers cannot switch to a different workspace through
-`X-Workspace-ID`.
-`GET /api/health` reports degraded status if configured database tables are not
-reachable, which makes a missed migration visible during deployment validation.
+The local demo mode is fixed to the `demo` workspace; callers cannot switch to
+a different workspace through `X-Workspace-ID`.
+Use `GET /health/live` for a dependency-free process probe and
+`GET /health/ready` for validated, initialized startup state. The authenticated
+`GET /internal/health/dependencies` endpoint performs bounded dependency checks
+without exposing failure details.
 After applying the migrations, verify a Supabase PostgreSQL connection with:
 
 ```bash
@@ -203,10 +248,12 @@ uv run --locked python scripts/check_database_setup.py \
 
 ## Authentication And Workspaces
 
-There are two normal-user modes:
+There are two identity modes. In both modes, every active workspace member has
+the same product-level `User` capabilities; differentiated roles are not
+implemented.
 
 ```dotenv
-# Public portfolio demo: users can access only DEFAULT_WORKSPACE_ID=demo.
+# Local demo: login grants the seeded Demo User access to DEFAULT_WORKSPACE_ID=demo.
 AUTH_MODE=demo
 ```
 
@@ -221,23 +268,15 @@ DATABASE_URL=postgresql+psycopg://...
 
 To enable authenticated mode:
 
-1. Create a Supabase project and enable the desired sign-in provider.
-2. Apply both migrations in order:
+1. Create a Supabase project, enable email/password authentication, and set the
+   application URL plus the confirmation redirect URL.
+2. Apply the Alembic baseline to a new database with
+   `uv run --locked alembic upgrade head`. For an existing pre-Alembic database,
+   use the reviewed `stamp` procedure in [`alembic/README.md`](alembic/README.md).
 
-```text
-migrations/0001_product_interactions.sql
-migrations/0002_auth_workspace_membership.sql
-migrations/0003_evidence_status.sql
-```
-
-3. Insert each organization and authorized user membership in Supabase SQL:
-
-```sql
-insert into workspaces (id, name) values ('acme', 'Acme Support');
-
-insert into workspace_members (workspace_id, user_id, role)
-values ('acme', '<supabase-auth-user-uuid>', 'member');
-```
+3. Open GroundDesk and use **Create workspace**. After the user signs up and
+   has a valid Supabase session, GroundDesk creates a profile, organization,
+   first workspace, and active user membership transactionally.
 
 4. A signed-in client supplies:
 
@@ -246,15 +285,15 @@ Authorization: Bearer <supabase-access-token>
 X-Workspace-ID: acme
 ```
 
-FastAPI validates the token through Supabase Auth, verifies membership in
-PostgreSQL, and only then applies the workspace filter to retrieval. The
-frontend now supports email/password sign-in, refreshable browser sessions,
-authorized workspace selection, personal saved-thread display, and
-answer-feedback submission.
+FastAPI validates the token through Supabase Auth, verifies active membership
+in PostgreSQL, and only then applies the workspace filter to retrieval. The
+frontend supports email/password sign-in, workspace registration, authorized
+workspace selection, document management, cited chat, and personal saved
+conversation history.
 
 Use `AUTH_MODE=demo` for the public interview demo if you do not yet want to
-provision user accounts. Enable `AUTH_MODE=supabase` once the migrations and
-at least one `workspace_members` record exist.
+provision user accounts. Enable `AUTH_MODE=supabase` once migrations and the
+Supabase browser configuration are ready.
 
 ## Retrieval Benchmark Demo
 
@@ -285,10 +324,9 @@ the BGE model once. The generated Markdown scorecard is suitable for showing:
 These metrics validate retrieval ranking only. They do not yet validate answer
 faithfulness or calibrated confidence.
 
-The deployed demo exposes a reviewed benchmark artifact through
-`GET /api/benchmark/summary` and renders its hybrid-retrieval result in the UI.
-The full JSON output remains ignored under `results/` for local failure analysis;
-review and commit the compact `benchmarks/reports/` artifacts before deployment.
+Benchmark reports are development artifacts and are not exposed by the product
+API. The full JSON output remains ignored under `results/` for local failure
+analysis; reviewed compact reports may be kept under `benchmarks/reports/`.
 
 The reviewed NFCorpus result selects `hybrid` as the deployed retrieval default:
 the current adaptive-rules strategy is retained for experiments because it did
@@ -402,19 +440,18 @@ path under Flash quota pressure; it is not a Flash-only benchmark.
 
 ```text
 app/
-  core/                 Shared config, schemas, safety and persistence repositories
-  ingestion/            Loaders, chunking, quality controls, ingestion service
-  retrieval/            Embeddings, lexical search, fusion, vector-store backends
-  generation/           RAG agent and LLM providers
+  core/                 Schemas, safety and persistence repositories
+  infrastructure/       Validated configuration and future concrete adapters
+  rag/                  Loaders, retrieval, generation and evaluation pipeline
   evals/                Golden-set and labelled retrieval evaluation
-  interfaces/           FastAPI API and product interface
+  web/                  Static product interface (HTML, CSS, JavaScript)
 sample_corpus/          Built-in demo support docs
 scripts/                Operational helpers such as Qdrant migration
 benchmarks/data/        Downloaded evaluation corpora (ignored by git)
 benchmarks/datasets/    Product-specific labelled evaluation cases
-benchmarks/reports/     Reviewed benchmark artifacts displayed in the demo
+benchmarks/reports/     Reviewed retrieval benchmark artifacts
 tests/                  Unit tests
-migrations/             PostgreSQL schema migrations for durable product state
+alembic/                PostgreSQL migration history and archived raw-SQL reference
 docs/                   Project docs and roadmap
 presentation/           Generated interview/demo slide deck
 ```
