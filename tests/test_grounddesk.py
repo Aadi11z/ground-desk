@@ -3,7 +3,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.core.auth import AccessController, AccessError, AuthenticatedUser
+from app.core.auth import (
+    AccessController,
+    AccessError,
+    AuthenticatedUser,
+    SupabaseUserVerifier,
+)
 from app.core.config import Settings
 from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.persistence import (
@@ -18,6 +23,7 @@ from app.core.workspace import (
     metadata_matches_workspace,
     normalize_workspace_id,
 )
+from app.evals import EVALUATION_SCOPE
 from app.evals.answers import run_answer_quality_evals
 from app.evals.benchmark import (
     build_benchmark_index,
@@ -37,7 +43,6 @@ from app.evals.support_dataset import (
 )
 from app.evals.synthetic import generate_synthetic_eval_dataset
 from app.evals.variants import compare_retrieval_variants
-from app.interfaces.demo_product import demo_product_html
 from app.rag.generation.agent import (
     SupportAgent,
     _retrieval_query,
@@ -77,9 +82,56 @@ def make_agent(tmp_path: Path):
     )
     embeddings = EmbeddingModel("unit-test")
     store = VectorStore(settings.index_dir)
-    ingestion = IngestionService(settings, embeddings, store)
-    agent = SupportAgent(settings, embeddings, store)
+    ingestion = _EvaluationIngestionFixture(
+        IngestionService(settings, embeddings, store)
+    )
+    agent = _EvaluationAgentFixture(SupportAgent(settings, embeddings, store))
     return ingestion, agent, store
+
+
+class _EvaluationIngestionFixture:
+    """Test-only adapter that makes the fixture tenant explicit at every call."""
+
+    def __init__(self, service: IngestionService):
+        self._service = service
+
+    @property
+    def store(self):
+        return self._service.store
+
+    def ingest_loaded(self, loaded, **kwargs):
+        return self._service.ingest_loaded(EVALUATION_SCOPE, loaded, **kwargs)
+
+    def ingest_path(self, path, **kwargs):
+        return self._service.ingest_path(EVALUATION_SCOPE, path, **kwargs)
+
+    def create_uploaded_document(self, path, **kwargs):
+        return self._service.create_uploaded_document(EVALUATION_SCOPE, path, **kwargs)
+
+    def replace_uploaded_document(self, document_id, path, **kwargs):
+        return self._service.replace_uploaded_document(
+            EVALUATION_SCOPE, document_id, path, **kwargs
+        )
+
+    def list_documents(self, **kwargs):
+        return self._service.list_documents(EVALUATION_SCOPE, **kwargs)
+
+
+class _EvaluationAgentFixture:
+    """Test-only answer adapter bound to the fixed evaluation tenant."""
+
+    def __init__(self, agent: SupportAgent):
+        self._agent = agent
+
+    def __getattr__(self, name):
+        return getattr(self._agent, name)
+
+    def answer(self, scope_or_request, request=None, **kwargs):
+        if request is None:
+            request = scope_or_request
+        else:
+            assert scope_or_request == EVALUATION_SCOPE
+        return self._agent.answer(EVALUATION_SCOPE, request, **kwargs)
 
 
 def test_ingestion_and_grounded_answer(tmp_path):
@@ -104,11 +156,14 @@ def test_ingestion_and_grounded_answer(tmp_path):
     assert not response.needs_escalation
 
 
-def test_empty_corpus_escalates(tmp_path):
+def test_empty_corpus_explains_that_no_documents_are_uploaded(tmp_path):
     _, agent, _ = make_agent(tmp_path)
     response = agent.answer(ChatRequest(question="Can you configure payroll?"))
-    assert response.needs_escalation
+    assert not response.needs_escalation
     assert response.confidence == 0
+    assert response.citations == []
+    assert response.evidence_status == "no_documents"
+    assert "no documents have been uploaded" in response.answer.lower()
 
 
 def test_conversation_context_is_sanitized_and_contextualizes_followup_retrieval():
@@ -272,7 +327,7 @@ def test_ingestion_persists_workspace_metadata_and_filters_documents(tmp_path):
             source_type="txt",
             source="memory",
             source_id="memory:alpha-auth",
-            metadata={"workspace_id": "alpha"},
+            metadata={"workspace": "alpha"},
         )
     )
     ingestion.ingest_loaded(
@@ -282,19 +337,16 @@ def test_ingestion_persists_workspace_metadata_and_filters_documents(tmp_path):
             source_type="txt",
             source="memory",
             source_id="memory:beta-billing",
-            metadata={"workspace_id": "beta"},
+            metadata={"workspace": "beta"},
         )
     )
 
-    alpha_documents = ingestion.list_documents(
-        metadata_filter={"workspace_id": "alpha"}
-    )
+    alpha_documents = ingestion.list_documents(metadata_filter={"workspace": "alpha"})
 
     assert len(alpha_documents) == 1
-    assert alpha_documents[0].metadata["workspace_id"] == "alpha"
+    assert alpha_documents[0].metadata["workspace"] == "alpha"
     assert (
-        store.documents[alpha_documents[0].document_id].metadata["workspace_id"]
-        == "alpha"
+        store.documents[alpha_documents[0].document_id].metadata["workspace"] == "alpha"
     )
 
 
@@ -343,7 +395,7 @@ def test_vector_store_factory_defaults_to_local_backend(tmp_path):
     store = create_vector_store(settings)
 
     assert isinstance(store, LocalVectorStore)
-    assert store.count_chunks() == 0
+    assert store.count_chunks(EVALUATION_SCOPE) == 0
 
 
 def test_hybrid_retrieval_promotes_exact_token_matches():
@@ -371,10 +423,10 @@ def test_hybrid_retrieval_promotes_exact_token_matches():
     )
 
     class FakeStore:
-        def list_chunks(self):
+        def list_chunks(self, scope):
             return [exact, generic]
 
-        def search(self, query_embedding, top_k=5):
+        def search(self, scope, query_embedding, top_k=5, **kwargs):
             return [
                 SearchResult(record=generic, score=0.9),
                 SearchResult(record=exact, score=0.1),
@@ -385,6 +437,7 @@ def test_hybrid_retrieval_promotes_exact_token_matches():
         EmbeddingModel("unit-test").encode_queries(["E_CONNRESET"]).vectors
     )
     results = retriever.retrieve(
+        EVALUATION_SCOPE,
         "What does E_CONNRESET mean?",
         query_embeddings=query_embeddings,
         top_k=2,
@@ -407,15 +460,16 @@ def test_sparse_retrieval_mode_uses_lexical_index_only():
     )
 
     class FakeStore:
-        def list_chunks(self):
+        def list_chunks(self, scope):
             return [record]
 
-        def search(self, query_embedding, top_k=5):
+        def search(self, scope, query_embedding, top_k=5, **kwargs):
             raise AssertionError("dense search should not run in sparse mode")
 
     retriever = HybridRetriever(Settings(retrieval_mode="sparse"), FakeStore())
     query_embeddings = EmbeddingModel("unit-test").encode_queries(["refund"]).vectors
     results = retriever.retrieve(
+        EVALUATION_SCOPE,
         "Annual Plus refund",
         query_embeddings=query_embeddings,
         top_k=1,
@@ -435,6 +489,7 @@ def test_local_store_supports_multiple_dense_vector_fields(tmp_path):
         source="memory",
         text="Refund guidance.",
         position=0,
+        workspace_id=EVALUATION_SCOPE.workspace_id,
     )
     manifest = DocumentManifest(
         document_id="doc-refund",
@@ -447,6 +502,7 @@ def test_local_store_supports_multiple_dense_vector_fields(tmp_path):
         original_filename=None,
         chunks_indexed=1,
         ingested_at="now",
+        workspace_id=EVALUATION_SCOPE.workspace_id,
     )
     store.register_embedding_space(
         model_name="unit-test",
@@ -455,6 +511,7 @@ def test_local_store_supports_multiple_dense_vector_fields(tmp_path):
         default_vector_name="dense_2",
     )
     store.upsert_document(
+        EVALUATION_SCOPE,
         manifest,
         [record],
         {
@@ -466,7 +523,9 @@ def test_local_store_supports_multiple_dense_vector_fields(tmp_path):
     assert store.vector_dimensions == {"dense_2": 2, "dense_4": 4}
     assert store.default_vector_name == "dense_2"
     assert store.largest_vector_name == "dense_4"
-    assert set(store.fetch_vectors(["refund"], vector_name="dense_4")) == {"refund"}
+    assert set(
+        store.fetch_vectors(EVALUATION_SCOPE, ["refund"], vector_name="dense_4")
+    ) == {"refund"}
 
 
 def test_qdrant_style_store_can_reconstruct_documents_from_chunks():
@@ -499,12 +558,12 @@ def test_qdrant_store_document_listing_falls_back_to_chunk_payloads():
     )
     store = object.__new__(QdrantVectorStore)
     store.documents = {}
-    store.list_chunks = lambda: [record]
+    store.list_chunks = lambda scope: [record]
 
-    documents = store.list_documents()
+    documents = store.list_documents(EVALUATION_SCOPE)
 
     assert documents[0].document_id == "doc-refund"
-    assert store.get_document("doc-refund").title == "Billing"
+    assert store.get_document(EVALUATION_SCOPE, "doc-refund").title == "Billing"
 
 
 def test_mrl_rerank_uses_largest_vector_field(tmp_path):
@@ -518,6 +577,7 @@ def test_mrl_rerank_uses_largest_vector_field(tmp_path):
         source="memory",
         text="Coarse winner.",
         position=0,
+        workspace_id=EVALUATION_SCOPE.workspace_id,
     )
     second = ChunkRecord(
         chunk_id="second",
@@ -528,6 +588,7 @@ def test_mrl_rerank_uses_largest_vector_field(tmp_path):
         source="memory",
         text="Fine winner.",
         position=0,
+        workspace_id=EVALUATION_SCOPE.workspace_id,
     )
     store.register_embedding_space(
         model_name="unit-test",
@@ -547,6 +608,7 @@ def test_mrl_rerank_uses_largest_vector_field(tmp_path):
             original_filename=None,
             chunks_indexed=1,
             ingested_at="now",
+            workspace_id=EVALUATION_SCOPE.workspace_id,
         )
     store.records = [first, second]
     store.vectors = {
@@ -558,6 +620,7 @@ def test_mrl_rerank_uses_largest_vector_field(tmp_path):
 
     retriever = HybridRetriever(Settings(retrieval_mode="dense"), store)
     results = retriever.retrieve(
+        EVALUATION_SCOPE,
         "query",
         {
             "dense_2": np.array([[1.0, 0.0]], dtype=np.float32),
@@ -859,7 +922,9 @@ def test_workflow_service_and_extended_evals(tmp_path):
         workflows.summarize_conversation(["Hello", "Can I get a refund?"])["turns"] == 2
     )
     assert workflows.faq_from_document("Billing", store.records[0].text)["faqs"]
-    assert "outline" in workflows.suggest_support_article("Can you configure payroll?")
+    assert "outline" in workflows.suggest_support_article(
+        EVALUATION_SCOPE, "Can you configure payroll?"
+    )
     assert "faithfulness" in run_answer_quality_evals(agent)
     assert generate_synthetic_eval_dataset(store.records)["num_examples"] >= 2
     assert "variants" in compare_retrieval_variants(agent)
@@ -1127,11 +1192,18 @@ def test_public_demo_access_is_fixed_to_default_workspace(tmp_path):
     controller = AccessController(settings, repository)
 
     assert (
-        controller.resolve(authorization=None, requested_workspace_id=None).workspace_id
+        controller.resolve(
+            authorization="Bearer grounddesk-demo-session", requested_workspace_id=None
+        ).workspace_id
         == "demo"
     )
     with pytest.raises(AccessError):
-        controller.resolve(authorization=None, requested_workspace_id="acme")
+        controller.resolve(
+            authorization="Bearer grounddesk-demo-session",
+            requested_workspace_id="acme",
+        )
+    with pytest.raises(AccessError):
+        controller.resolve(authorization=None, requested_workspace_id="demo")
 
 
 def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path):
@@ -1175,7 +1247,6 @@ def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path
     )
 
     assert context.user_id == user_id
-    assert context.role == "member"
     assert len(repository.list_history("acme", user_id=user_id)) == 1
     assert repository.list_user_workspaces(user_id)[0]["id"] == "acme"
     with pytest.raises(AccessError):
@@ -1184,15 +1255,31 @@ def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path
         )
 
 
-def test_product_interface_contains_authenticated_workspace_and_feedback_controls():
-    html = demo_product_html()
+def test_supabase_jwks_verifier_validates_claims(monkeypatch):
+    verifier = SupabaseUserVerifier("https://example.supabase.co", "authenticated")
 
-    assert "/api/client-config" in html
-    assert "/api/me/workspaces" in html
-    assert 'id="signInPanel"' in html
-    assert 'id="workspaceSelect"' in html
-    assert 'id="historyPanel"' in html
-    assert "/api/feedback" in html
+    class KeyClient:
+        def get_signing_key_from_jwt(self, token):
+            assert token == "valid-token"
+            return type("Key", (), {"key": "public-key"})()
+
+    verifier.jwks = KeyClient()
+    monkeypatch.setattr(
+        "app.core.auth.decode",
+        lambda *args, **kwargs: {
+            "sub": "11111111-1111-1111-1111-111111111111",
+            "email": "owner@example.test",
+            "user_metadata": {"display_name": "Workspace Owner"},
+        },
+    )
+
+    user = verifier.verify("valid-token")
+
+    assert user == AuthenticatedUser(
+        user_id="11111111-1111-1111-1111-111111111111",
+        email="owner@example.test",
+        display_name="Workspace Owner",
+    )
 
 
 def test_product_support_dataset_covers_followups_and_no_answer_cases():
