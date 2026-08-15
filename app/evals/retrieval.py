@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.retriever import HybridRetriever
 
+from . import EVALUATION_SCOPE
+
 
 @dataclass(frozen=True)
 class RetrievalEvalCase:
@@ -48,7 +50,9 @@ def run_retrieval_evals(
 
     for case in RETRIEVAL_GOLDEN_SET:
         vectors = embeddings.encode_queries([case.question]).vectors
-        ranked = retriever.retrieve(case.question, vectors, top_k=top_k)
+        ranked = retriever.retrieve(
+            EVALUATION_SCOPE, case.question, vectors, top_k=top_k
+        )
         ranked_titles = [result.record.title for result in ranked]
         relevance = [
             1 if title in case.relevant_titles else 0 for title in ranked_titles

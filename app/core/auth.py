@@ -7,10 +7,14 @@ workspace access through durable membership records.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Protocol
-from urllib import error, request
+
+from jwt import InvalidTokenError, PyJWKClient, decode
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
+
+from app.domain.permissions import WorkspaceRole
+from app.domain.tenancy import TenantScope
 
 from .workspace import normalize_workspace_id
 
@@ -26,18 +30,16 @@ class AccessError(Exception):
 class AuthenticatedUser:
     user_id: str
     email: str | None = None
+    display_name: str | None = None
 
 
 @dataclass(frozen=True)
-class AccessContext:
-    workspace_id: str
-    role: str
-    user_id: str | None = None
+class AccessContext(TenantScope):
     email: str | None = None
 
     @property
     def authenticated(self) -> bool:
-        return self.user_id is not None
+        return True
 
 
 class UserVerifier(Protocol):
@@ -45,37 +47,51 @@ class UserVerifier(Protocol):
 
 
 class SupabaseUserVerifier:
-    """Validate a Supabase Auth access token through its Auth server.
+    """Validate asymmetric Supabase JWTs against a cached JWKS key set."""
 
-    This route supports Supabase projects using legacy shared-secret tokens as
-    well as newer signing keys. A JWKS verifier can later replace it to reduce
-    per-request network cost for projects using asymmetric signing keys.
-    """
-
-    def __init__(self, supabase_url: str, publishable_key: str):
-        self.supabase_url = supabase_url.rstrip("/")
-        self.publishable_key = publishable_key
+    def __init__(self, supabase_url: str, audience: str):
+        self.issuer = f"{supabase_url.rstrip('/')}/auth/v1"
+        self.audience = audience
+        self.jwks = PyJWKClient(
+            f"{self.issuer}/.well-known/jwks.json",
+            cache_jwk_set=True,
+            lifespan=300,
+        )
 
     def verify(self, token: str) -> AuthenticatedUser:
-        auth_request = request.Request(
-            f"{self.supabase_url}/auth/v1/user",
-            headers={
-                "apikey": self.publishable_key,
-                "Authorization": f"Bearer {token}",
-            },
-            method="GET",
-        )
         try:
-            with request.urlopen(auth_request, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            raise AccessError(401, "Missing or invalid access token.") from exc
-        except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            signing_key = self.jwks.get_signing_key_from_jwt(token)
+            payload = decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
+                audience=self.audience,
+                issuer=self.issuer,
+                options={"require": ["sub", "exp", "iss", "aud"]},
+            )
+        except PyJWKClientConnectionError as exc:
             raise AccessError(503, "Authentication provider is unavailable.") from exc
+        except (InvalidTokenError, PyJWKClientError) as exc:
+            raise AccessError(401, "Missing or invalid access token.") from exc
         user_id = payload.get("id")
         if not user_id:
+            user_id = payload.get("sub")
+        if not isinstance(user_id, str) or not user_id:
             raise AccessError(401, "Missing or invalid access token.")
-        return AuthenticatedUser(user_id=str(user_id), email=payload.get("email"))
+        metadata = payload.get("user_metadata")
+        display_name = (
+            metadata.get("display_name")
+            if isinstance(metadata, dict)
+            and isinstance(metadata.get("display_name"), str)
+            else None
+        )
+        return AuthenticatedUser(
+            user_id=user_id,
+            email=payload.get("email")
+            if isinstance(payload.get("email"), str)
+            else None,
+            display_name=display_name,
+        )
 
 
 class AccessController:
@@ -85,8 +101,9 @@ class AccessController:
         self.mode = settings.auth_mode.lower()
         self.verifier = verifier
         if self.mode == "supabase" and self.verifier is None:
+            supabase_url = settings.supabase_url_value
             self.verifier = SupabaseUserVerifier(
-                settings.supabase_url, settings.supabase_publishable_key
+                supabase_url or "", settings.supabase_jwt_audience
             )
 
     def healthcheck_configuration(self) -> None:
@@ -103,15 +120,22 @@ class AccessController:
             raise RuntimeError(
                 "AUTH_MODE=supabase requires PERSISTENCE_BACKEND=database."
             )
-        if not self.settings.supabase_url or not self.settings.supabase_publishable_key:
+        if (
+            not self.settings.supabase_url_value
+            or not self.settings.supabase_publishable_key
+        ):
             raise RuntimeError(
                 "AUTH_MODE=supabase requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY."
             )
 
     def authenticate(self, authorization: str | None) -> AuthenticatedUser:
-        if self.mode != "supabase":
-            raise AccessError(
-                401, "Sign-in is not enabled in the public demo workspace."
+        if self.mode == "demo":
+            if authorization != "Bearer grounddesk-demo-session":
+                raise AccessError(401, "Sign in to access the demo workspace.")
+            return AuthenticatedUser(
+                user_id=self.settings.demo_user_id,
+                email=self.settings.demo_user_email,
+                display_name=self.settings.demo_user_name,
             )
         self._validate_configuration()
         if not authorization or not authorization.startswith("Bearer "):
@@ -136,26 +160,24 @@ class AccessController:
             raise AccessError(400, str(exc)) from exc
 
         if self.mode == "demo":
-            if require_authenticated:
-                raise AccessError(
-                    401, "This endpoint requires a signed-in workspace user."
-                )
+            user = self.authenticate(authorization)
             if workspace_id != self.settings.default_workspace_id:
-                raise AccessError(
-                    403, "The public demo can only access the demo workspace."
-                )
+                raise AccessError(404, "Workspace is not available.")
             return AccessContext(
                 workspace_id=self.settings.default_workspace_id,
-                role="public_demo",
+                user_id=user.user_id,
+                role=WorkspaceRole.OWNER,
+                email=user.email,
             )
 
         user = self.authenticate(authorization)
-        role = self.repository.membership_role(user.user_id, workspace_id)
-        if role is None:
-            raise AccessError(403, "User is not a member of this workspace.")
+        membership = self.repository.get_active_membership(user.user_id, workspace_id)
+        if membership is None:
+            # Do not reveal whether the requested workspace exists to non-members.
+            raise AccessError(404, "Workspace is not available.")
         return AccessContext(
             workspace_id=workspace_id,
-            role=role,
             user_id=user.user_id,
+            role=membership.role,
             email=user.email,
         )

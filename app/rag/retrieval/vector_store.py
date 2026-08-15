@@ -10,6 +10,8 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from app.domain.tenancy import TenantScope
+
 
 @dataclass
 class DocumentManifest:
@@ -27,6 +29,7 @@ class DocumentManifest:
     warnings: tuple[str, ...] = ()
     diagnostics: dict[str, int] = field(default_factory=dict)
     metadata: dict[str, str] = field(default_factory=dict)
+    workspace_id: str = ""
 
 
 @dataclass
@@ -44,6 +47,7 @@ class ChunkRecord:
     page_number: int | None = None
     word_count: int = 0
     content_hash: str = ""
+    workspace_id: str = ""
 
 
 @dataclass
@@ -65,15 +69,17 @@ class VectorStoreBackend(Protocol):
     @property
     def largest_vector_name(self) -> str | None: ...
 
-    def has_records(self) -> bool: ...
+    def has_records(self, scope: TenantScope) -> bool: ...
 
-    def count_chunks(self) -> int: ...
+    def count_chunks(self, scope: TenantScope) -> int: ...
 
-    def list_chunks(self) -> list[ChunkRecord]: ...
+    def list_chunks(self, scope: TenantScope) -> list[ChunkRecord]: ...
 
-    def list_documents(self) -> list[DocumentManifest]: ...
+    def list_documents(self, scope: TenantScope) -> list[DocumentManifest]: ...
 
-    def get_document(self, document_id: str) -> DocumentManifest | None: ...
+    def get_document(
+        self, scope: TenantScope, document_id: str
+    ) -> DocumentManifest | None: ...
 
     def register_embedding_space(
         self,
@@ -86,15 +92,17 @@ class VectorStoreBackend(Protocol):
 
     def upsert_document(
         self,
+        scope: TenantScope,
         document: DocumentManifest,
         records: list[ChunkRecord],
         embeddings: dict[str, np.ndarray],
     ) -> None: ...
 
-    def delete_document(self, document_id: str) -> int: ...
+    def delete_document(self, scope: TenantScope, document_id: str) -> int: ...
 
     def search(
         self,
+        scope: TenantScope,
         query_embedding: np.ndarray,
         top_k: int = 5,
         *,
@@ -103,7 +111,7 @@ class VectorStoreBackend(Protocol):
     ) -> list[SearchResult]: ...
 
     def fetch_vectors(
-        self, chunk_ids: list[str], *, vector_name: str
+        self, scope: TenantScope, chunk_ids: list[str], *, vector_name: str
     ) -> dict[str, np.ndarray]: ...
 
 
@@ -158,25 +166,35 @@ class LocalVectorStore:
             return self.vectors[default]
         return np.empty((0, 384), dtype=np.float32)
 
-    def has_records(self) -> bool:
-        return bool(self.records)
+    def has_records(self, scope: TenantScope) -> bool:
+        return bool(self.list_chunks(scope))
 
-    def count_chunks(self) -> int:
-        return len(self.records)
+    def count_chunks(self, scope: TenantScope) -> int:
+        return len(self.list_chunks(scope))
 
-    def list_chunks(self) -> list[ChunkRecord]:
-        return list(self.records)
+    def list_chunks(self, scope: TenantScope) -> list[ChunkRecord]:
+        return [
+            record
+            for record in self.records
+            if record.workspace_id == scope.workspace_id
+        ]
 
-    def list_documents(self) -> list[DocumentManifest]:
+    def list_documents(self, scope: TenantScope) -> list[DocumentManifest]:
         if self.documents:
-            return list(self.documents.values())
-        return list(_reconstruct_documents(self.list_chunks()).values())
+            return [
+                document
+                for document in self.documents.values()
+                if document.workspace_id == scope.workspace_id
+            ]
+        return list(_reconstruct_documents(self.list_chunks(scope)).values())
 
-    def get_document(self, document_id: str) -> DocumentManifest | None:
+    def get_document(
+        self, scope: TenantScope, document_id: str
+    ) -> DocumentManifest | None:
         document = self.documents.get(document_id)
-        if document is not None:
+        if document is not None and document.workspace_id == scope.workspace_id:
             return document
-        return _reconstruct_documents(self.list_chunks()).get(document_id)
+        return _reconstruct_documents(self.list_chunks(scope)).get(document_id)
 
     @property
     def documents_path(self) -> Path:
@@ -273,12 +291,17 @@ class LocalVectorStore:
 
     def upsert_document(
         self,
+        scope: TenantScope,
         document: DocumentManifest,
         records: list[ChunkRecord],
         embeddings: dict[str, np.ndarray],
     ) -> None:
+        _validate_workspace_document(scope, document, records)
+        existing = self.documents.get(document.document_id)
+        if existing is not None and existing.workspace_id != scope.workspace_id:
+            raise ValueError("Document ID belongs to another workspace.")
         self._validate_embeddings(records, embeddings)
-        self._delete_document_chunks(document.document_id)
+        self._delete_document_chunks(scope, document.document_id)
         if records:
             for vector_name, matrix in embeddings.items():
                 current = self.vectors.get(vector_name)
@@ -310,17 +333,23 @@ class LocalVectorStore:
         self.records.extend(records)
         self.save()
 
-    def delete_document(self, document_id: str) -> int:
-        deleted = self._delete_document_chunks(document_id)
+    def delete_document(self, scope: TenantScope, document_id: str) -> int:
+        document = self.documents.get(document_id)
+        if document is None or document.workspace_id != scope.workspace_id:
+            return 0
+        deleted = self._delete_document_chunks(scope, document_id)
         self.documents.pop(document_id, None)
         self.save()
         return deleted
 
-    def _delete_document_chunks(self, document_id: str) -> int:
+    def _delete_document_chunks(self, scope: TenantScope, document_id: str) -> int:
         keep_indices = [
             i
             for i, record in enumerate(self.records)
-            if record.document_id != document_id
+            if not (
+                record.document_id == document_id
+                and record.workspace_id == scope.workspace_id
+            )
         ]
         deleted = len(self.records) - len(keep_indices)
         self.records = [self.records[i] for i in keep_indices]
@@ -335,6 +364,7 @@ class LocalVectorStore:
 
     def search(
         self,
+        scope: TenantScope,
         query_embedding: np.ndarray,
         top_k: int = 5,
         *,
@@ -359,7 +389,8 @@ class LocalVectorStore:
         candidate_indices = [
             index
             for index, record in enumerate(self.records)
-            if document_ids is None or record.document_id in document_ids
+            if record.workspace_id == scope.workspace_id
+            and (document_ids is None or record.document_id in document_ids)
         ]
         top_indices = sorted(
             candidate_indices, key=lambda index: scores[index], reverse=True
@@ -373,7 +404,7 @@ class LocalVectorStore:
         ]
 
     def fetch_vectors(
-        self, chunk_ids: list[str], *, vector_name: str
+        self, scope: TenantScope, chunk_ids: list[str], *, vector_name: str
     ) -> dict[str, np.ndarray]:
         if vector_name not in self.vectors:
             return {}
@@ -381,7 +412,8 @@ class LocalVectorStore:
         return {
             record.chunk_id: self.vectors[vector_name][index]
             for index, record in enumerate(self.records)
-            if record.chunk_id in requested
+            if record.workspace_id == scope.workspace_id
+            and record.chunk_id in requested
         }
 
     def _vector_path(self, vector_name: str) -> Path:
@@ -406,6 +438,9 @@ def _document_from_payload(item: dict[str, Any]) -> DocumentManifest:
     payload["warnings"] = tuple(payload.get("warnings", ()))
     payload.setdefault("diagnostics", {})
     payload.setdefault("metadata", {})
+    # Legacy index files have no trustworthy tenant attribution and must never
+    # be surfaced through a scoped operation.
+    payload.setdefault("workspace_id", "")
     return DocumentManifest(**payload)
 
 
@@ -417,6 +452,7 @@ def _chunk_from_payload(item: dict[str, Any]) -> ChunkRecord:
     payload.setdefault("page_number", None)
     payload.setdefault("word_count", len(str(payload.get("text", "")).split()))
     payload.setdefault("content_hash", "")
+    payload.setdefault("workspace_id", "")
     return ChunkRecord(**payload)
 
 
@@ -439,6 +475,7 @@ def _reconstruct_documents(records: list[ChunkRecord]) -> dict[str, DocumentMani
             chunks_indexed=len(chunks),
             ingested_at="legacy",
             status="indexed",
+            workspace_id=first.workspace_id,
         )
     return documents
 
@@ -454,6 +491,27 @@ def _atomic_save_numpy(path: Path, array: np.ndarray) -> None:
     with tmp_path.open("wb") as handle:
         np.save(handle, array)
     tmp_path.replace(path)
+
+
+def _validate_workspace_document(
+    scope: TenantScope, document: DocumentManifest, records: list[ChunkRecord]
+) -> None:
+    if not document.workspace_id or document.workspace_id != scope.workspace_id:
+        raise ValueError("Document workspace does not match the tenant scope.")
+    if any(record.workspace_id != scope.workspace_id for record in records):
+        raise ValueError("Chunk workspace does not match the tenant scope.")
+
+
+def _workspace_filter(models, scope: TenantScope):
+    """Build the mandatory Qdrant tenant predicate for every scoped operation."""
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="workspace_id",
+                match=models.MatchValue(value=scope.workspace_id),
+            )
+        ]
+    )
 
 
 class QdrantVectorStore:
@@ -484,7 +542,13 @@ class QdrantVectorStore:
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.url = url
         self.collection_name = collection_name
-        self.client = QdrantClient(url=url, api_key=api_key)
+        self.client = QdrantClient(
+            url=url,
+            api_key=api_key,
+            # The service constructor must not issue a network probe during
+            # lifespan startup; private diagnostics and actual operations do.
+            check_compatibility=False,
+        )
         self.documents: dict[str, DocumentManifest] = {}
         self.index_metadata: dict[str, Any] = {}
         self.load()
@@ -553,19 +617,27 @@ class QdrantVectorStore:
         )
         _write_json(self.index_metadata_path, self.index_metadata)
 
-    def has_records(self) -> bool:
-        return self.count_chunks() > 0
+    def has_records(self, scope: TenantScope) -> bool:
+        return self.count_chunks(scope) > 0
 
-    def count_chunks(self) -> int:
+    def count_chunks(self, scope: TenantScope) -> int:
         if not self._collection_exists():
             return 0
+        from qdrant_client import models
+
         return int(
-            self.client.count(collection_name=self.collection_name, exact=True).count
+            self.client.count(
+                collection_name=self.collection_name,
+                count_filter=_workspace_filter(models, scope),
+                exact=True,
+            ).count
         )
 
-    def list_chunks(self) -> list[ChunkRecord]:
+    def list_chunks(self, scope: TenantScope) -> list[ChunkRecord]:
         if not self._collection_exists():
             return []
+        from qdrant_client import models
+
         records: list[ChunkRecord] = []
         offset = None
         while True:
@@ -573,6 +645,7 @@ class QdrantVectorStore:
                 collection_name=self.collection_name,
                 limit=256,
                 offset=offset,
+                scroll_filter=_workspace_filter(models, scope),
                 with_payload=True,
                 with_vectors=False,
             )
@@ -585,16 +658,22 @@ class QdrantVectorStore:
                 break
         return records
 
-    def list_documents(self) -> list[DocumentManifest]:
+    def list_documents(self, scope: TenantScope) -> list[DocumentManifest]:
         if self.documents:
-            return list(self.documents.values())
-        return list(_reconstruct_documents(self.list_chunks()).values())
+            return [
+                document
+                for document in self.documents.values()
+                if document.workspace_id == scope.workspace_id
+            ]
+        return list(_reconstruct_documents(self.list_chunks(scope)).values())
 
-    def get_document(self, document_id: str) -> DocumentManifest | None:
+    def get_document(
+        self, scope: TenantScope, document_id: str
+    ) -> DocumentManifest | None:
         document = self.documents.get(document_id)
-        if document is not None:
+        if document is not None and document.workspace_id == scope.workspace_id:
             return document
-        return _reconstruct_documents(self.list_chunks()).get(document_id)
+        return _reconstruct_documents(self.list_chunks(scope)).get(document_id)
 
     def register_embedding_space(
         self,
@@ -622,7 +701,7 @@ class QdrantVectorStore:
             else None
         )
         actual = (model_name, backend, dimensions, default_vector_name)
-        if self.count_chunks() and expected and expected != actual:
+        if self._count_all_chunks() and expected and expected != actual:
             raise ValueError(
                 "Embedding space mismatch: existing index uses "
                 f"{expected}, but ingestion produced {actual}. Reindex before mixing embeddings."
@@ -634,12 +713,17 @@ class QdrantVectorStore:
 
     def upsert_document(
         self,
+        scope: TenantScope,
         document: DocumentManifest,
         records: list[ChunkRecord],
         embeddings: dict[str, np.ndarray],
     ) -> None:
+        _validate_workspace_document(scope, document, records)
+        existing = self.documents.get(document.document_id)
+        if existing is not None and existing.workspace_id != scope.workspace_id:
+            raise ValueError("Document ID belongs to another workspace.")
         LocalVectorStore._validate_embeddings(records, embeddings)
-        self.delete_document(document.document_id)
+        self.delete_document(scope, document.document_id)
         if records:
             from qdrant_client import models
 
@@ -660,7 +744,10 @@ class QdrantVectorStore:
         self.documents[document.document_id] = document
         self.save()
 
-    def delete_document(self, document_id: str) -> int:
+    def delete_document(self, scope: TenantScope, document_id: str) -> int:
+        document = self.documents.get(document_id)
+        if document is None or document.workspace_id != scope.workspace_id:
+            return 0
         if not self._collection_exists():
             self.documents.pop(document_id, None)
             self.save()
@@ -672,11 +759,12 @@ class QdrantVectorStore:
                 must=[
                     models.FieldCondition(
                         key="document_id", match=models.MatchValue(value=document_id)
-                    )
+                    ),
+                    *_workspace_filter(models, scope).must,
                 ]
             )
         )
-        deleted = self._count_document_points(document_id)
+        deleted = self._count_document_points(scope, document_id)
         self.client.delete(
             collection_name=self.collection_name, points_selector=selector, wait=True
         )
@@ -686,6 +774,7 @@ class QdrantVectorStore:
 
     def search(
         self,
+        scope: TenantScope,
         query_embedding: np.ndarray,
         top_k: int = 5,
         *,
@@ -694,7 +783,7 @@ class QdrantVectorStore:
     ) -> list[SearchResult]:
         if document_ids is not None and not document_ids:
             return []
-        if not self._collection_exists() or self.count_chunks() == 0:
+        if not self._collection_exists() or self.count_chunks(scope) == 0:
             return []
         vector_name = vector_name or self.default_vector_name
         if not vector_name:
@@ -707,18 +796,17 @@ class QdrantVectorStore:
             raise ValueError(
                 f"Query embedding dimension {query_embedding.reshape(-1).shape[0]} does not match index dimension {expected_dimension}."
             )
-        query_filter = None
-        if document_ids is not None:
-            from qdrant_client import models
+        from qdrant_client import models
 
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="document_id",
-                        match=models.MatchAny(any=list(document_ids)),
-                    )
-                ]
+        filter_conditions = list(_workspace_filter(models, scope).must)
+        if document_ids is not None:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="document_id",
+                    match=models.MatchAny(any=list(document_ids)),
+                )
             )
+        query_filter = models.Filter(must=filter_conditions)
         response = self.client.query_points(
             collection_name=self.collection_name,
             query=query_embedding.reshape(-1).astype(np.float32).tolist(),
@@ -737,7 +825,7 @@ class QdrantVectorStore:
         ]
 
     def fetch_vectors(
-        self, chunk_ids: list[str], *, vector_name: str
+        self, scope: TenantScope, chunk_ids: list[str], *, vector_name: str
     ) -> dict[str, np.ndarray]:
         if not self._collection_exists() or not chunk_ids:
             return {}
@@ -752,6 +840,8 @@ class QdrantVectorStore:
         vectors: dict[str, np.ndarray] = {}
         for point in points:
             payload = point.payload or {}
+            if payload.get("workspace_id") != scope.workspace_id:
+                continue
             chunk_id = str(payload.get("chunk_id", ""))
             raw_vector = (
                 point.vector.get(vector_name)
@@ -785,7 +875,7 @@ class QdrantVectorStore:
             return
         from qdrant_client import models
 
-        for field_name in ("document_id", "source_type", "title"):
+        for field_name in ("workspace_id", "document_id", "source_type", "title"):
             try:
                 self.client.create_payload_index(
                     collection_name=self.collection_name,
@@ -798,7 +888,14 @@ class QdrantVectorStore:
                 if "already exists" not in message and "already has" not in message:
                     raise
 
-    def _count_document_points(self, document_id: str) -> int:
+    def _count_all_chunks(self) -> int:
+        if not self._collection_exists():
+            return 0
+        return int(
+            self.client.count(collection_name=self.collection_name, exact=True).count
+        )
+
+    def _count_document_points(self, scope: TenantScope, document_id: str) -> int:
         from qdrant_client import models
 
         result = self.client.count(
@@ -807,7 +904,8 @@ class QdrantVectorStore:
                 must=[
                     models.FieldCondition(
                         key="document_id", match=models.MatchValue(value=document_id)
-                    )
+                    ),
+                    *_workspace_filter(models, scope).must,
                 ]
             ),
             exact=True,

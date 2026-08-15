@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.core.models import ChatRequest
+from app.domain.tenancy import TenantScope
 
 from .agent import SupportAgent
 
@@ -11,9 +12,9 @@ class SupportWorkflowService:
     def __init__(self, agent: SupportAgent):
         self.agent = agent
 
-    def escalation_note(self, question: str) -> dict:
+    def escalation_note(self, scope: TenantScope, question: str) -> dict:
         response = self.agent.answer(
-            ChatRequest(question=question), force_template=True
+            scope, ChatRequest(question=question), force_template=True
         )
         note = (
             f"Escalation needed for query: {question}\n"
@@ -70,9 +71,9 @@ class SupportWorkflowService:
             "highlights": bullets[:5],
         }
 
-    def knowledge_gap(self, question: str) -> dict:
+    def knowledge_gap(self, scope: TenantScope, question: str) -> dict:
         response = self.agent.answer(
-            ChatRequest(question=question), force_template=True
+            scope, ChatRequest(question=question), force_template=True
         )
         return {
             "question": question,
@@ -81,8 +82,8 @@ class SupportWorkflowService:
             "supporting_citations": len(response.citations),
         }
 
-    def suggest_support_article(self, question: str) -> dict:
-        gap = self.knowledge_gap(question)
+    def suggest_support_article(self, scope: TenantScope, question: str) -> dict:
+        gap = self.knowledge_gap(scope, question)
         return {
             "question": question,
             "should_draft": gap["knowledge_gap"],

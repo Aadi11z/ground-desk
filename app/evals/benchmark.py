@@ -31,6 +31,8 @@ from app.rag.retrieval.vector_store import (
     LocalVectorStore,
 )
 
+from . import EVALUATION_SCOPE
+
 
 @dataclass(frozen=True)
 class BenchmarkDocument:
@@ -208,6 +210,7 @@ def build_benchmark_index(
                 page_number=chunk.page_number,
                 word_count=chunk.word_count,
                 content_hash=chunk.content_hash,
+                workspace_id=EVALUATION_SCOPE.workspace_id,
             )
             for chunk in chunks
         ]
@@ -226,6 +229,7 @@ def build_benchmark_index(
             status="indexed" if document_records else "rejected",
             warnings=tuple(warnings),
             metadata={"benchmark_dataset": dataset.name},
+            workspace_id=EVALUATION_SCOPE.workspace_id,
         )
 
     if not records:
@@ -312,7 +316,9 @@ def evaluate_retrieval_strategy(
         }
         started = perf_counter()
         query_vectors = embeddings.encode_queries([query]).vectors
-        ranked_chunks = retriever.retrieve(query, query_vectors, top_k=max_k)
+        ranked_chunks = retriever.retrieve(
+            EVALUATION_SCOPE, query, query_vectors, top_k=max_k
+        )
         latencies_ms.append((perf_counter() - started) * 1000)
         ranked_document_ids = _distinct_document_ids(ranked_chunks)
         relevance = [

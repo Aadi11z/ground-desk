@@ -1,8 +1,11 @@
 .venv/
+**/.venv/
 __pycache__/
+**/__pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .git/
 data/
 results/
@@ -11,3 +14,4 @@ benchmarks/data/
 *.pyo
 *.pyd
 .env
+graphify-out/

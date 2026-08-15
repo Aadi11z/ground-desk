@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import (
     get_agent,
+    get_app_settings,
     get_product_repository,
     normal_access_context,
 )
 from app.core.auth import AccessContext
-from app.core.config import settings
 from app.core.models import ChatRequest
 from app.core.workspace import apply_workspace_filter
+from app.infrastructure.config import Settings
 
 router = APIRouter(tags=["chat"])
 
@@ -19,6 +20,7 @@ def chat(
     context: AccessContext = Depends(normal_access_context),
     agent=Depends(get_agent),
     repository=Depends(get_product_repository),
+    settings: Settings = Depends(get_app_settings),
 ):
     workspace_id = context.workspace_id
     scoped_request = apply_workspace_filter(request, workspace_id)
@@ -35,7 +37,7 @@ def chat(
             else []
         )
         response = agent.answer(
-            scoped_request, conversation_context=conversation_context
+            context, scoped_request, conversation_context=conversation_context
         )
         conversation_id = repository.record_answer(
             workspace_id, scoped_request, response, user_id=context.user_id

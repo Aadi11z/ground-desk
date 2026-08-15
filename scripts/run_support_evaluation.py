@@ -15,7 +15,6 @@ import argparse
 import json
 import sys
 import tempfile
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -234,10 +233,11 @@ def main() -> None:
             )
         runs = []
         for mode in modes:
-            mode_settings = replace(
-                settings,
-                retrieval_mode=mode,
-                adaptive_retrieval_enabled=mode == "adaptive",
+            mode_settings = settings.model_copy(
+                update={
+                    "retrieval_mode": mode,
+                    "adaptive_retrieval_enabled": mode == "adaptive",
+                }
             )
             agent = SupportAgent(mode_settings, embeddings, store)
             completed = checkpoint["completed_results"].setdefault(mode, {})

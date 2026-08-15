@@ -1,39 +1,49 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.dependencies import (
+    _document_text,
     _ensure_workspace_document,
-    _workspace_id,
     get_ingestion_service,
     get_vector_store,
-    normal_access_context,
-    require_admin,
+    require_document_manager,
+    require_document_reader,
 )
 from app.core.auth import AccessContext
-from app.core.config import settings
-from app.core.models import DocumentIngestResponse, UrlIngestRequest
-from app.core.workspace import normalize_workspace_id
+from app.core.models import DocumentIngestResponse, DocumentPreview, UrlIngestRequest
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.get("")
 def list_documents(
-    context: AccessContext = Depends(normal_access_context),
+    context: AccessContext = Depends(require_document_reader),
     ingestion_service=Depends(get_ingestion_service),
 ):
     return ingestion_service.list_documents(
-        metadata_filter={"workspace_id": context.workspace_id}
+        context, metadata_filter={"workspace_id": context.workspace_id}
     )
 
 
-def _workspace_id_from_header(value: str | None) -> str:
-    try:
-        return normalize_workspace_id(value, default=settings.default_workspace_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+@router.get("/{document_id}/preview", response_model=DocumentPreview)
+def preview_document(
+    document_id: str,
+    context: AccessContext = Depends(require_document_reader),
+    store=Depends(get_vector_store),
+) -> DocumentPreview:
+    """Return an authorized extracted-text preview without exposing storage paths."""
+    document = _ensure_workspace_document(document_id, context, store=store)
+    text = _document_text(document_id, context, store=store)
+    limit = 100_000
+    return DocumentPreview(
+        document_id=document.document_id,
+        title=document.title,
+        original_filename=document.original_filename,
+        text=text[:limit],
+        truncated=len(text) > limit,
+    )
 
 
 def _response(record) -> DocumentIngestResponse:
@@ -48,20 +58,19 @@ def _response(record) -> DocumentIngestResponse:
 @router.post("", response_model=DocumentIngestResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    _: None = Depends(require_admin),
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(require_document_manager),
     ingestion_service=Depends(get_ingestion_service),
 ) -> DocumentIngestResponse:
-    workspace_id = _workspace_id_from_header(x_workspace_id)
     suffix = Path(file.filename or "document.txt").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
         record = ingestion_service.create_uploaded_document(
+            context,
             tmp_path,
             original_filename=file.filename or "document.txt",
-            metadata={"workspace_id": workspace_id},
+            metadata={"workspace_id": context.workspace_id},
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -74,23 +83,22 @@ async def upload_document(
 async def replace_document(
     document_id: str,
     file: UploadFile = File(...),
-    _: None = Depends(require_admin),
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(require_document_manager),
     ingestion_service=Depends(get_ingestion_service),
     store=Depends(get_vector_store),
 ) -> DocumentIngestResponse:
-    workspace_id = _workspace_id(x_workspace_id)
-    _ensure_workspace_document(document_id, workspace_id, store=store)
+    _ensure_workspace_document(document_id, context, store=store)
     suffix = Path(file.filename or "document.txt").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
         record = ingestion_service.replace_uploaded_document(
+            context,
             document_id,
             tmp_path,
             original_filename=file.filename or "document.txt",
-            metadata={"workspace_id": workspace_id},
+            metadata={"workspace_id": context.workspace_id},
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -104,14 +112,12 @@ async def replace_document(
 @router.post("/url", response_model=DocumentIngestResponse)
 def ingest_url(
     request: UrlIngestRequest,
-    _: None = Depends(require_admin),
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(require_document_manager),
     ingestion_service=Depends(get_ingestion_service),
 ) -> DocumentIngestResponse:
-    workspace_id = _workspace_id(x_workspace_id)
     try:
         record = ingestion_service.ingest_url(
-            request.url, metadata={"workspace_id": workspace_id}
+            context, request.url, metadata={"workspace_id": context.workspace_id}
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -121,13 +127,11 @@ def ingest_url(
 @router.delete("/{document_id}")
 def delete_document(
     document_id: str,
-    _: None = Depends(require_admin),
-    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
+    context: AccessContext = Depends(require_document_manager),
     store=Depends(get_vector_store),
 ):
-    workspace_id = _workspace_id(x_workspace_id)
-    _ensure_workspace_document(document_id, workspace_id, store=store)
+    _ensure_workspace_document(document_id, context, store=store)
     return {
         "document_id": document_id,
-        "chunks_deleted": store.delete_document(document_id),
+        "chunks_deleted": store.delete_document(context, document_id),
     }

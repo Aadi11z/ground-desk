@@ -20,6 +20,8 @@ from app.rag.generation.agent import (
     _safe_conversation_context,
 )
 
+from . import EVALUATION_SCOPE
+
 
 @dataclass(frozen=True)
 class SupportEvalCase:
@@ -94,6 +96,7 @@ def evaluate_support_dataset(
         result = completed_results.get(case.case_id)
         if result is None:
             response = agent.answer(
+                EVALUATION_SCOPE,
                 ChatRequest(question=case.question, top_k=top_k),
                 force_template=force_template,
                 conversation_context=list(case.conversation_context),
@@ -324,7 +327,7 @@ def _score_retrieval_only(
     )
     query = _retrieval_query(case.question, safe_context)
     vectors = agent.embeddings.encode_queries([query]).vectors
-    results = agent.retriever.retrieve(query, vectors, top_k=top_k)
+    results = agent.retriever.retrieve(EVALUATION_SCOPE, query, vectors, top_k=top_k)
     citation_titles = [result.record.title for result in results]
     expected = {title.lower() for title in case.expected_titles}
     return {

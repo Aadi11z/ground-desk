@@ -8,12 +8,14 @@
 │ ChatResponse               │ Generated answer, citations, evidence status, escalation result    │
 │ DocumentRecord             │ Full document ingestion/listing representation                     │
 │ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
+│ DocumentPreview            │ Extracted, authorized text preview for the product interface        │
 │ UrlIngestRequest           │ URL input payload                                                  │
 │ HealthResponse             │ API health/status output                                           │
 │ WorkflowRequest            │ Input for support workflow endpoints                               │
 │ ConversationSummaryRequest │ Conversation messages supplied for summarization                   │
 │ FeedbackRequest            │ User feedback payload                                              │
 │ FeedbackResponse           │ Confirmation that feedback was accepted                            │
+│ WorkspaceOnboardingRequest │ Organization and first-workspace details from a signed-in user      │
 └────────────────────────────┴────────────────────────────────────────────────────────────────────┘
 """
 
@@ -85,6 +87,14 @@ class DocumentIngestResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class DocumentPreview(BaseModel):
+    document_id: str
+    title: str
+    original_filename: str | None = None
+    text: str
+    truncated: bool = False
+
+
 class UrlIngestRequest(BaseModel):
     url: str = Field(min_length=1)
 
@@ -117,3 +127,9 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     accepted: bool
     trace_id: str
+
+
+class WorkspaceOnboardingRequest(BaseModel):
+    organization_name: str = Field(min_length=1, max_length=200)
+    workspace_name: str = Field(min_length=1, max_length=200)
+    display_name: str | None = Field(default=None, max_length=120)

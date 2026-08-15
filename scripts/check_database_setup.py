@@ -1,9 +1,4 @@
-"""Verify and optionally provision GroundDesk PostgreSQL/Supabase demo state.
-
-This utility does not run migrations. Apply SQL files first, then use it to
-fail fast on missing schema and seed a workspace membership when demonstrating
-authenticated mode.
-"""
+"""Verify an Alembic-managed GroundDesk database and optionally seed demo state."""
 
 from __future__ import annotations
 
@@ -37,11 +32,6 @@ def parse_args() -> argparse.Namespace:
         choices=("member", "knowledge_manager", "owner"),
         default="member",
     )
-    parser.add_argument(
-        "--dev-auto-create",
-        action="store_true",
-        help="Create tables only for a local SQLite smoke test; never use for Supabase.",
-    )
     return parser.parse_args()
 
 
@@ -52,13 +42,8 @@ def main() -> None:
         raise SystemExit(
             "Set PERSISTENCE_BACKEND=database and DATABASE_URL before checking PostgreSQL."
         )
-    if args.dev_auto_create and not settings.database_url.startswith("sqlite"):
-        raise SystemExit(
-            "--dev-auto-create is allowed only with a SQLite DATABASE_URL."
-        )
-    repository = DatabaseProductRepository(
-        settings.database_url, auto_create=args.dev_auto_create
-    )
+    repository = DatabaseProductRepository(settings.database_url)
+    _assert_alembic_at_head(repository)
     repository.healthcheck()
     if settings.auth_mode.lower() == "supabase" or args.member_user_id:
         repository.auth_healthcheck()
@@ -78,11 +63,6 @@ def main() -> None:
         if args.member_user_id
         else None
     )
-    migrations = [
-        "0001_product_interactions.sql",
-        "0002_auth_workspace_membership.sql",
-        "0003_evidence_status.sql",
-    ]
     print(
         json.dumps(
             {
@@ -91,7 +71,7 @@ def main() -> None:
                 "workspace_id": workspace_id,
                 "member_seeded": bool(args.member_user_id),
                 "membership_role": membership,
-                "required_migrations": migrations,
+                "alembic_revision": _alembic_head(),
             },
             indent=2,
         )
@@ -154,6 +134,28 @@ def _seed_workspace(
                 )
                 .values(role=role)
             )
+
+
+def _alembic_head() -> str:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(ROOT / "alembic.ini"))
+    return ScriptDirectory.from_config(config).get_current_head()
+
+
+def _assert_alembic_at_head(repository: DatabaseProductRepository) -> None:
+    from alembic.runtime.migration import MigrationContext
+
+    expected = _alembic_head()
+    with repository.engine.connect() as connection:
+        current = MigrationContext.configure(connection).get_current_revision()
+    if current != expected:
+        raise SystemExit(
+            "Database schema revision is unexpected. "
+            f"Expected {expected!r}, found {current!r}. Run Alembic upgrade or, "
+            "for a reviewed pre-Alembic database, Alembic stamp."
+        )
 
 
 if __name__ == "__main__":

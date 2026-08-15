@@ -8,6 +8,7 @@ from typing import Literal
 import numpy as np
 
 from app.core.config import Settings
+from app.domain.tenancy import TenantScope
 
 from .adaptive import AdaptiveQueryPlanner, RetrievalPlan, StructuredQueryPlanner
 from .compression import compress_results
@@ -67,7 +68,7 @@ class HybridRetriever:
             settings.final_reranker,
             cross_encoder_model=settings.cross_encoder_model,
         )
-        self._corpus_signature: tuple[tuple[str, str], ...] | None = None
+        self._corpus_signature: tuple[str, tuple[tuple[str, str], ...]] | None = None
         self.last_diagnostics = RetrievalDiagnostics(
             mode=self._mode(),
             dense_candidates=0,
@@ -78,6 +79,7 @@ class HybridRetriever:
 
     def retrieve(
         self,
+        scope: TenantScope,
         query: str,
         query_embeddings: dict[str, np.ndarray] | np.ndarray | None = None,
         top_k: int = 5,
@@ -112,6 +114,7 @@ class HybridRetriever:
             dense_results.extend(
                 self._search_dense(
                     _query_vector(search_embeddings, coarse_vector_name),
+                    scope=scope,
                     top_k=max(top_k, self.settings.coarse_candidate_k),
                     vector_name=coarse_vector_name,
                     document_ids=document_ids,
@@ -123,6 +126,7 @@ class HybridRetriever:
                 self._search_sparse(
                     search_query,
                     top_k=max(top_k, self.settings.sparse_candidate_k),
+                    scope=scope,
                     document_ids=document_ids,
                 )
                 if mode in {"sparse", "hybrid"}
@@ -136,6 +140,7 @@ class HybridRetriever:
             dense_results.extend(
                 self._search_dense(
                     _query_vector(hyde_embeddings, coarse_vector_name),
+                    scope=scope,
                     top_k=max(top_k, self.settings.coarse_candidate_k),
                     vector_name=coarse_vector_name,
                     document_ids=document_ids,
@@ -158,6 +163,7 @@ class HybridRetriever:
 
         if mode == "dense":
             reranked = self._rerank_if_possible(
+                scope,
                 dense_results,
                 query_embeddings,
                 top_k=max(top_k, self.settings.dense_candidate_k),
@@ -178,6 +184,7 @@ class HybridRetriever:
             sparse_weight=self.settings.sparse_rrf_weight,
         )
         reranked = self._rerank_if_possible(
+            scope,
             fused,
             query_embeddings,
             top_k=max(top_k, self.settings.dense_candidate_k),
@@ -189,9 +196,10 @@ class HybridRetriever:
         query: str,
         top_k: int,
         *,
+        scope: TenantScope,
         document_ids: set[str] | None = None,
     ) -> list[SearchResult]:
-        self._refresh_lexical_index_if_needed()
+        self._refresh_lexical_index_if_needed(scope)
         results = self.lexical_index.search(
             query, top_k=max(top_k, self.settings.sparse_candidate_k)
         )
@@ -203,33 +211,41 @@ class HybridRetriever:
             ]
         return results[:top_k]
 
-    def _refresh_lexical_index_if_needed(self) -> None:
-        signature = self._current_corpus_signature()
+    def _refresh_lexical_index_if_needed(self, scope: TenantScope) -> None:
+        signature = self._current_corpus_signature(scope)
         if signature == self._corpus_signature:
             return
-        records = self.store.list_chunks()
+        records = self.store.list_chunks(scope)
         self.lexical_index.rebuild(records)
         self._corpus_signature = signature
 
-    def _current_corpus_signature(self) -> tuple[tuple[str, str], ...]:
+    def _current_corpus_signature(
+        self, scope: TenantScope
+    ) -> tuple[str, tuple[tuple[str, str], ...]]:
         if hasattr(self.store, "list_documents"):
-            documents = self.store.list_documents()
+            documents = self.store.list_documents(scope)
             if documents:
-                return tuple(
-                    sorted(
-                        (
-                            document.document_id,
-                            f"{document.version_id}:{document.chunks_indexed}",
+                return (
+                    scope.workspace_id,
+                    tuple(
+                        sorted(
+                            (
+                                document.document_id,
+                                f"{document.version_id}:{document.chunks_indexed}",
+                            )
+                            for document in documents
                         )
-                        for document in documents
-                    )
+                    ),
                 )
-        records = self.store.list_chunks()
-        return tuple(
-            sorted(
-                (record.chunk_id, record.content_hash or record.text)
-                for record in records
-            )
+        records = self.store.list_chunks(scope)
+        return (
+            scope.workspace_id,
+            tuple(
+                sorted(
+                    (record.chunk_id, record.content_hash or record.text)
+                    for record in records
+                )
+            ),
         )
 
     def _mode(self, override: str | None = None) -> RetrievalMode:
@@ -259,6 +275,7 @@ class HybridRetriever:
 
     def _rerank_if_possible(
         self,
+        scope: TenantScope,
         candidates: list[SearchResult],
         query_embeddings: dict[str, np.ndarray],
         *,
@@ -275,7 +292,7 @@ class HybridRetriever:
 
         candidate_ids = [candidate.record.chunk_id for candidate in candidates]
         document_vectors = self.store.fetch_vectors(
-            candidate_ids, vector_name=largest_vector_name
+            scope, candidate_ids, vector_name=largest_vector_name
         )
         if not document_vectors:
             return candidates[:top_k]
@@ -338,19 +355,18 @@ class HybridRetriever:
         self,
         query_embedding: np.ndarray,
         *,
+        scope: TenantScope,
         top_k: int,
         vector_name: str,
         document_ids: set[str] | None = None,
     ) -> list[SearchResult]:
-        try:
-            return self.store.search(
-                query_embedding,
-                top_k=top_k,
-                vector_name=vector_name,
-                document_ids=document_ids,
-            )
-        except TypeError:
-            return self.store.search(query_embedding, top_k=top_k)
+        return self.store.search(
+            scope,
+            query_embedding,
+            top_k=top_k,
+            vector_name=vector_name,
+            document_ids=document_ids,
+        )
 
 
 def _reciprocal_rank_fusion(

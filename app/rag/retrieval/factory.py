@@ -12,8 +12,8 @@ def create_vector_store(settings: Settings) -> VectorStoreBackend:
     if backend == "qdrant":
         return QdrantVectorStore(
             settings.index_dir,
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
+            url=str(settings.qdrant_url),
+            api_key=settings.qdrant_api_key_value,
             collection_name=settings.qdrant_collection,
         )
     raise ValueError(

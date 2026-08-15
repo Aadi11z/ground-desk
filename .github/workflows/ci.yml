@@ -23,3 +23,7 @@ jobs:
         run: uv run --locked pytest -q
       - name: Formatting
         run: uv run --locked ruff format --check .
+      - name: Docker build and import smoke test
+        run: |
+          docker build --tag grounddesk:ci .
+          docker run --rm grounddesk:ci python -c "from app.main import app; assert app.title == 'GroundDesk'"

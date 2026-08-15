@@ -9,23 +9,24 @@ retrievable vector payloads.
 from __future__ import annotations
 
 import json
+import re
 import uuid
+from contextlib import contextmanager
+from copy import copy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from app.domain.permissions import WorkspaceRole
+from app.domain.tenancy import ActiveMembership
+
+from .database import normalize_database_url
 from .models import ChatRequest, ChatResponse, FeedbackRequest
 
 
-def normalize_database_url(database_url: str) -> str:
-    """Route common Supabase PostgreSQL URLs through the installed psycopg v3 driver."""
-    for prefix in ("postgresql+psycopg2://", "postgresql://", "postgres://"):
-        if database_url.startswith(prefix):
-            return "postgresql+psycopg://" + database_url[len(prefix) :]
-    return database_url
-
-
 class ProductRepository(Protocol):
+    def bind_session(self, session) -> ProductRepository: ...
+
     def healthcheck(self) -> None: ...
 
     def auth_healthcheck(self) -> None: ...
@@ -58,9 +59,29 @@ class ProductRepository(Protocol):
 
     def list_feedback(self, workspace_id: str) -> list[dict]: ...
 
-    def membership_role(self, user_id: str, workspace_id: str) -> str | None: ...
+    def has_workspace_membership(self, user_id: str, workspace_id: str) -> bool: ...
+
+    def get_active_membership(
+        self, user_id: str, workspace_id: str
+    ) -> ActiveMembership | None: ...
 
     def list_user_workspaces(self, user_id: str) -> list[dict]: ...
+
+    def get_profile(self, user_id: str) -> dict | None: ...
+
+    def create_workspace_for_user(
+        self,
+        user_id: str,
+        *,
+        email: str | None,
+        display_name: str | None,
+        organization_name: str,
+        workspace_name: str,
+    ) -> dict: ...
+
+    def ensure_demo_identity(
+        self, *, user_id: str, email: str, display_name: str, workspace_id: str
+    ) -> None: ...
 
 
 class JsonlRepository:
@@ -91,6 +112,9 @@ class JsonlProductRepository:
     def __init__(self, feedback_path: Path, chat_history_path: Path):
         self.feedback = JsonlRepository(feedback_path)
         self.history = JsonlRepository(chat_history_path)
+
+    def bind_session(self, session) -> JsonlProductRepository:
+        return self
 
     def healthcheck(self) -> None:
         return None
@@ -178,23 +202,53 @@ class JsonlProductRepository:
             if item.get("workspace_id") == workspace_id
         ]
 
-    def membership_role(self, user_id: str, workspace_id: str) -> str | None:
+    def has_workspace_membership(self, user_id: str, workspace_id: str) -> bool:
+        return False
+
+    def get_active_membership(
+        self, user_id: str, workspace_id: str
+    ) -> ActiveMembership | None:
         return None
 
     def list_user_workspaces(self, user_id: str) -> list[dict]:
         return []
 
+    def get_profile(self, user_id: str) -> dict | None:
+        return None
+
+    def create_workspace_for_user(
+        self,
+        user_id: str,
+        *,
+        email: str | None,
+        display_name: str | None,
+        organization_name: str,
+        workspace_name: str,
+    ) -> dict:
+        raise RuntimeError("Workspace registration requires database persistence.")
+
+    def ensure_demo_identity(
+        self, *, user_id: str, email: str, display_name: str, workspace_id: str
+    ) -> None:
+        return None
+
 
 class DatabaseProductRepository:
     """SQLAlchemy-backed interaction repository compatible with PostgreSQL.
 
-    Run ``migrations/0001_product_interactions.sql`` before enabling this
-    backend in a hosted environment. ``auto_create`` is provided only for local
-    development and tests.
+    Run the reviewed Alembic migration history before enabling this backend in
+    a hosted environment. ``auto_create`` is retained only for isolated tests;
+    production settings reject it.
     """
 
-    def __init__(self, database_url: str, *, auto_create: bool = False):
-        if not database_url:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        auto_create: bool = False,
+        engine=None,
+    ):
+        if engine is None and not database_url:
             raise RuntimeError(
                 "DATABASE_URL is required when PERSISTENCE_BACKEND=database."
             )
@@ -203,6 +257,7 @@ class DatabaseProductRepository:
             from sqlalchemy import (
                 JSON,
                 Boolean,
+                CheckConstraint,
                 Column,
                 DateTime,
                 Float,
@@ -212,6 +267,7 @@ class DatabaseProductRepository:
                 String,
                 Table,
                 Text,
+                UniqueConstraint,
                 Uuid,
                 create_engine,
             )
@@ -221,12 +277,36 @@ class DatabaseProductRepository:
             ) from exc
 
         metadata = MetaData()
+        self.profiles = Table(
+            "profiles",
+            metadata,
+            Column("user_id", Uuid(as_uuid=False), primary_key=True),
+            Column("email", String(320), nullable=True),
+            Column("display_name", String(120), nullable=True),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+            Column("updated_at", DateTime(timezone=True), nullable=False),
+        )
+        self.organizations = Table(
+            "organizations",
+            metadata,
+            Column("id", String(64), primary_key=True),
+            Column("name", String(200), nullable=False),
+            Column("slug", String(200), nullable=False, unique=True),
+            Column("created_by", Uuid(as_uuid=False), nullable=False, index=True),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+            Column("updated_at", DateTime(timezone=True), nullable=False),
+        )
         self.workspaces = Table(
             "workspaces",
             metadata,
             Column("id", String(64), primary_key=True),
             Column("name", String(200), nullable=False),
+            Column("organization_id", String(64), nullable=True, index=True),
+            Column("slug", String(200), nullable=True),
+            Column("status", String(32), nullable=True),
+            Column("created_by", Uuid(as_uuid=False), nullable=True, index=True),
             Column("created_at", DateTime(timezone=True), nullable=False),
+            Column("updated_at", DateTime(timezone=True), nullable=True),
         )
         self.conversations = Table(
             "conversations",
@@ -346,14 +426,64 @@ class DatabaseProductRepository:
             Column("role", String(40), nullable=False),
             Column("created_at", DateTime(timezone=True), nullable=False),
         )
-        self.engine = create_engine(database_url, pool_pre_ping=True)
+        self.memberships = Table(
+            "memberships",
+            metadata,
+            Column("id", String(64), primary_key=True),
+            Column(
+                "workspace_id",
+                String(64),
+                ForeignKey("workspaces.id", ondelete="CASCADE"),
+                nullable=False,
+                index=True,
+            ),
+            Column("user_id", Uuid(as_uuid=False), nullable=False, index=True),
+            Column("role", String(40), nullable=False),
+            Column("status", String(32), nullable=False),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+            Column("updated_at", DateTime(timezone=True), nullable=False),
+            UniqueConstraint(
+                "workspace_id", "user_id", name="uq_memberships_workspace_user"
+            ),
+            CheckConstraint(
+                "role in ('owner', 'admin', 'knowledge_manager', "
+                "'support_agent', 'viewer')",
+                name="ck_memberships_role",
+            ),
+        )
+        self.engine = engine or create_engine(
+            database_url,
+            pool_pre_ping=True,
+            max_overflow=0,
+        )
+        self._owns_engine = engine is None
+        self._session = None
         if auto_create:
             metadata.create_all(self.engine)
+
+    def bind_session(self, session) -> DatabaseProductRepository:
+        repository = copy(self)
+        repository._session = session
+        repository._owns_engine = False
+        return repository
+
+    @contextmanager
+    def _operation(self):
+        if self._session is None:
+            with self.engine.begin() as connection:
+                yield connection
+            return
+        with self._session.begin():
+            yield self._session
+
+    def close(self) -> None:
+        if self._owns_engine:
+            self.engine.dispose()
 
     def healthcheck(self) -> None:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             connection.execute(select(self.workspaces.c.id).limit(1)).first()
             connection.execute(select(self.conversations.c.user_id).limit(1)).first()
             connection.execute(select(self.messages.c.user_id).limit(1)).first()
@@ -369,10 +499,8 @@ class DatabaseProductRepository:
     def auth_healthcheck(self) -> None:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
-            connection.execute(
-                select(self.workspace_members.c.user_id).limit(1)
-            ).first()
+        with self._operation() as connection:
+            connection.execute(select(self.memberships.c.user_id).limit(1)).first()
 
     def record_answer(
         self,
@@ -390,7 +518,7 @@ class DatabaseProductRepository:
         assistant_message_id = _id("msg")
         citations = [citation.model_dump() for citation in response.citations]
 
-        with self.engine.begin() as connection:
+        with self._operation() as connection:
             workspace = connection.execute(
                 select(self.workspaces.c.id).where(self.workspaces.c.id == workspace_id)
             ).first()
@@ -478,7 +606,7 @@ class DatabaseProductRepository:
     ) -> None:
         from sqlalchemy import insert, select
 
-        with self.engine.begin() as connection:
+        with self._operation() as connection:
             trace = connection.execute(
                 select(self.answer_traces.c.trace_id).where(
                     self.answer_traces.c.trace_id == request.trace_id,
@@ -511,7 +639,7 @@ class DatabaseProductRepository:
     ) -> list[dict]:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             statement = select(self.answer_traces).where(
                 self.answer_traces.c.workspace_id == workspace_id
             )
@@ -532,7 +660,7 @@ class DatabaseProductRepository:
     ) -> list[dict]:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             conversation_statement = select(self.conversations.c.id).where(
                 self.conversations.c.id == conversation_id,
                 self.conversations.c.workspace_id == workspace_id,
@@ -571,7 +699,7 @@ class DatabaseProductRepository:
     def list_feedback(self, workspace_id: str) -> list[dict]:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             rows = connection.execute(
                 select(self.feedback)
                 .where(self.feedback.c.workspace_id == workspace_id)
@@ -579,27 +707,74 @@ class DatabaseProductRepository:
             ).mappings()
             return [_jsonable(dict(row)) for row in rows]
 
-    def membership_role(self, user_id: str, workspace_id: str) -> str | None:
+    def has_workspace_membership(self, user_id: str, workspace_id: str) -> bool:
+        return self.get_active_membership(user_id, workspace_id) is not None
+
+    def get_active_membership(
+        self, user_id: str, workspace_id: str
+    ) -> ActiveMembership | None:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             row = connection.execute(
+                select(self.memberships.c.role, self.memberships.c.status).where(
+                    self.memberships.c.user_id == user_id,
+                    self.memberships.c.workspace_id == workspace_id,
+                )
+            ).first()
+            if row is not None:
+                # Canonical membership status takes precedence over legacy rows.
+                if row.status != "active":
+                    return None
+                try:
+                    role = WorkspaceRole(row.role)
+                except ValueError:
+                    return None
+                return ActiveMembership(
+                    workspace_id=workspace_id, user_id=user_id, role=role
+                )
+            legacy = connection.execute(
                 select(self.workspace_members.c.role).where(
                     self.workspace_members.c.user_id == user_id,
                     self.workspace_members.c.workspace_id == workspace_id,
                 )
             ).first()
-            return str(row.role) if row else None
+            if legacy is None:
+                return None
+            try:
+                role = WorkspaceRole(legacy.role)
+            except ValueError:
+                return None
+            return ActiveMembership(
+                workspace_id=workspace_id, user_id=user_id, role=role
+            )
 
     def list_user_workspaces(self, user_id: str) -> list[dict]:
         from sqlalchemy import select
 
-        with self.engine.connect() as connection:
+        with self._operation() as connection:
             rows = connection.execute(
                 select(
                     self.workspaces.c.id,
                     self.workspaces.c.name,
-                    self.workspace_members.c.role,
+                )
+                .select_from(
+                    self.memberships.join(
+                        self.workspaces,
+                        self.memberships.c.workspace_id == self.workspaces.c.id,
+                    )
+                )
+                .where(
+                    self.memberships.c.user_id == user_id,
+                    self.memberships.c.status == "active",
+                )
+                .order_by(self.workspaces.c.name)
+            ).mappings()
+            result = {str(row["id"]): dict(row) for row in rows}
+            legacy_rows = connection.execute(
+                select(
+                    self.workspaces.c.id,
+                    self.workspaces.c.name,
                 )
                 .select_from(
                     self.workspace_members.join(
@@ -610,16 +785,22 @@ class DatabaseProductRepository:
                 .where(self.workspace_members.c.user_id == user_id)
                 .order_by(self.workspaces.c.name)
             ).mappings()
-            return [dict(row) for row in rows]
+            for row in legacy_rows:
+                result.setdefault(str(row["id"]), dict(row))
+            return sorted(result.values(), key=lambda workspace: workspace["name"])
 
     def add_workspace_member(
-        self, workspace_id: str, user_id: str, *, role: str = "member"
+        self,
+        workspace_id: str,
+        user_id: str,
+        *,
+        role: WorkspaceRole = WorkspaceRole.KNOWLEDGE_MANAGER,
     ) -> None:
         """Test/bootstrap helper; hosted membership management is a later UI feature."""
         from sqlalchemy import insert, select
 
         now = _utcnow()
-        with self.engine.begin() as connection:
+        with self._operation() as connection:
             workspace = connection.execute(
                 select(self.workspaces.c.id).where(self.workspaces.c.id == workspace_id)
             ).first()
@@ -633,16 +814,214 @@ class DatabaseProductRepository:
                 insert(self.workspace_members).values(
                     workspace_id=workspace_id,
                     user_id=user_id,
-                    role=role,
+                    role=role.value,
                     created_at=now,
                 )
             )
+            connection.execute(
+                insert(self.memberships).values(
+                    id=_id("membership"),
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role=role.value,
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+    def get_profile(self, user_id: str) -> dict | None:
+        from sqlalchemy import select
+
+        with self._operation() as connection:
+            row = (
+                connection.execute(
+                    select(self.profiles).where(self.profiles.c.user_id == user_id)
+                )
+                .mappings()
+                .first()
+            )
+            return _jsonable(dict(row)) if row else None
+
+    def create_workspace_for_user(
+        self,
+        user_id: str,
+        *,
+        email: str | None,
+        display_name: str | None,
+        organization_name: str,
+        workspace_name: str,
+    ) -> dict:
+        from sqlalchemy import insert, select
+
+        now = _utcnow()
+        organization_name = organization_name.strip()
+        workspace_name = workspace_name.strip()
+        if not organization_name or not workspace_name:
+            raise ValueError("Organization and workspace names are required.")
+        organization_id = _id("org")
+        workspace_id = _id("workspace")
+        organization_slug = _slug(organization_name)
+        workspace_slug = _slug(workspace_name)
+
+        with self._operation() as connection:
+            if connection.execute(
+                select(self.organizations.c.id).where(
+                    self.organizations.c.slug == organization_slug
+                )
+            ).first():
+                raise ValueError("An organization with that name already exists.")
+            profile = connection.execute(
+                select(self.profiles.c.user_id).where(
+                    self.profiles.c.user_id == user_id
+                )
+            ).first()
+            if profile is None:
+                connection.execute(
+                    insert(self.profiles).values(
+                        user_id=user_id,
+                        email=email,
+                        display_name=display_name,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            else:
+                connection.execute(
+                    self.profiles.update()
+                    .where(self.profiles.c.user_id == user_id)
+                    .values(
+                        email=email,
+                        display_name=display_name,
+                        updated_at=now,
+                    )
+                )
+            connection.execute(
+                insert(self.organizations).values(
+                    id=organization_id,
+                    name=organization_name,
+                    slug=organization_slug,
+                    created_by=user_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            connection.execute(
+                insert(self.workspaces).values(
+                    id=workspace_id,
+                    name=workspace_name,
+                    organization_id=organization_id,
+                    slug=workspace_slug,
+                    status="active",
+                    created_by=user_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            connection.execute(
+                insert(self.memberships).values(
+                    id=_id("membership"),
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role=WorkspaceRole.OWNER.value,
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        return {"id": workspace_id, "name": workspace_name}
+
+    def ensure_demo_identity(
+        self, *, user_id: str, email: str, display_name: str, workspace_id: str
+    ) -> None:
+        from sqlalchemy import insert, select
+
+        now = _utcnow()
+        organization_id = "grounddesk-demo"
+        with self._operation() as connection:
+            if (
+                connection.execute(
+                    select(self.profiles.c.user_id).where(
+                        self.profiles.c.user_id == user_id
+                    )
+                ).first()
+                is None
+            ):
+                connection.execute(
+                    insert(self.profiles).values(
+                        user_id=user_id,
+                        email=email,
+                        display_name=display_name,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            if (
+                connection.execute(
+                    select(self.organizations.c.id).where(
+                        self.organizations.c.id == organization_id
+                    )
+                ).first()
+                is None
+            ):
+                connection.execute(
+                    insert(self.organizations).values(
+                        id=organization_id,
+                        name="GroundDesk Demo",
+                        slug="grounddesk-demo",
+                        created_by=user_id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            if (
+                connection.execute(
+                    select(self.workspaces.c.id).where(
+                        self.workspaces.c.id == workspace_id
+                    )
+                ).first()
+                is None
+            ):
+                connection.execute(
+                    insert(self.workspaces).values(
+                        id=workspace_id,
+                        name="Demo Workspace",
+                        organization_id=organization_id,
+                        slug="demo",
+                        status="active",
+                        created_by=user_id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            if (
+                connection.execute(
+                    select(self.memberships.c.id).where(
+                        self.memberships.c.workspace_id == workspace_id,
+                        self.memberships.c.user_id == user_id,
+                    )
+                ).first()
+                is None
+            ):
+                connection.execute(
+                    insert(self.memberships).values(
+                        id="membership_grounddesk_demo",
+                        workspace_id=workspace_id,
+                        user_id=user_id,
+                        role=WorkspaceRole.OWNER.value,
+                        status="active",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
 
 
-def create_product_repository(settings) -> ProductRepository:
+def create_product_repository(settings, *, database_runtime=None) -> ProductRepository:
     if settings.persistence_backend.lower() == "database":
         return DatabaseProductRepository(
-            settings.database_url, auto_create=settings.database_auto_create
+            settings.database_url,
+            auto_create=settings.database_auto_create,
+            engine=database_runtime.engine if database_runtime is not None else None,
         )
     return JsonlProductRepository(settings.feedback_path, settings.chat_history_path)
 
@@ -669,6 +1048,13 @@ def analytics_for(repository: ProductRepository, workspace_id: str) -> dict:
 
 def _id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    if not slug:
+        raise ValueError("Names must contain at least one letter or number.")
+    return slug[:180]
 
 
 def _utcnow() -> datetime:

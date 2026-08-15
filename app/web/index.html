@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GroundDesk</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <section id="authScreen" class="auth-shell" aria-labelledby="auth-title">
+      <div class="auth-intro">
+        <a class="brand dark" href="/">GroundDesk</a>
+        <p class="eyebrow">Workspace support intelligence</p>
+        <h1 id="auth-title">Give every support team a trusted knowledge desk.</h1>
+        <p>Upload internal documentation, ask cited questions, and keep each workspace separate.</p>
+        <ul>
+          <li>Evidence-backed answers</li>
+          <li>Private workspace knowledge</li>
+          <li>Escalation when evidence is insufficient</li>
+        </ul>
+      </div>
+      <div class="auth-card">
+        <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+          <button class="auth-tab active" type="button" data-auth-view="login">Log in</button>
+          <button class="auth-tab" type="button" data-auth-view="register">Create workspace</button>
+        </div>
+        <div id="authNotice" class="notice" role="status" hidden></div>
+        <form id="loginForm" class="auth-form">
+          <h2>Welcome back</h2>
+          <p>Log in to an existing GroundDesk workspace.</p>
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" autocomplete="email" required>
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+          <button type="submit">Log in</button>
+          <button id="demoLogin" class="secondary demo-login" type="button">Continue as Demo User</button>
+        </form>
+        <form id="registerForm" class="auth-form" hidden>
+          <h2>Create your workspace</h2>
+          <p>Your account becomes the first user of the workspace.</p>
+          <label for="registerName">Your name</label>
+          <input id="registerName" autocomplete="name" required>
+          <label for="registerEmail">Work email</label>
+          <input id="registerEmail" type="email" autocomplete="email" required>
+          <label for="registerPassword">Password</label>
+          <input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required>
+          <label for="organizationName">Organization</label>
+          <input id="organizationName" autocomplete="organization" placeholder="Acme Inc." required>
+          <label for="workspaceName">First workspace</label>
+          <input id="workspaceName" placeholder="Customer Support" required>
+          <button type="submit">Create workspace</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="onboardingScreen" class="auth-shell" hidden aria-labelledby="onboarding-title">
+      <div class="auth-intro">
+        <a class="brand dark" href="/">GroundDesk</a>
+        <p class="eyebrow">One final step</p>
+        <h1 id="onboarding-title">Create your first workspace.</h1>
+        <p>Workspaces keep each company's documents and conversations separated.</p>
+      </div>
+      <form id="onboardingForm" class="auth-card auth-form">
+        <div id="onboardingNotice" class="notice" role="status" hidden></div>
+        <label for="onboardingName">Your display name</label>
+        <input id="onboardingName" autocomplete="name">
+        <label for="onboardingOrganization">Organization</label>
+        <input id="onboardingOrganization" autocomplete="organization" required>
+        <label for="onboardingWorkspace">Workspace</label>
+        <input id="onboardingWorkspace" placeholder="Customer Support" required>
+        <button type="submit">Create and continue</button>
+        <button id="onboardingCancel" class="secondary" type="button" hidden>Cancel</button>
+        <button id="onboardingLogout" class="secondary" type="button">Log out</button>
+      </form>
+    </section>
+
+    <main id="appShell" class="shell" hidden>
+      <aside class="sidebar">
+        <a class="brand" href="#ask">GroundDesk</a>
+        <p class="tagline">Evidence-backed support answers.</p>
+        <nav aria-label="Product navigation">
+          <button class="nav-link active" data-view="ask">Ask</button>
+          <button class="nav-link" data-view="documents">Documents</button>
+          <button class="nav-link" data-view="history">History</button>
+        </nav>
+        <label class="field-label" for="workspaceSelect">Workspace</label>
+        <select id="workspaceSelect" aria-label="Active workspace"></select>
+        <button id="newWorkspaceButton" class="text-button" type="button" hidden>Add company workspace</button>
+        <div class="profile-card">
+          <strong id="profileName"></strong>
+          <span id="profileEmail"></span>
+          <button id="logoutButton" class="text-button" type="button">Log out</button>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div id="notice" class="notice" role="status" hidden></div>
+
+        <section id="ask" class="view active" aria-labelledby="ask-title">
+          <header class="view-header">
+            <p class="eyebrow">Support assistant</p>
+            <h1 id="ask-title">Ask your documents</h1>
+            <p>Answers use only evidence retrieved from this workspace.</p>
+          </header>
+          <div id="chatMessages" class="chat-messages" aria-live="polite">
+            <div class="empty-state">Upload a document, then ask a support question.</div>
+          </div>
+          <form id="chatForm" class="composer">
+            <label class="sr-only" for="question">Question</label>
+            <textarea id="question" rows="3" placeholder="Ask a question about your documents…" required></textarea>
+            <button type="submit">Send question</button>
+          </form>
+        </section>
+
+        <section id="documents" class="view" aria-labelledby="documents-title">
+          <header class="view-header">
+            <p class="eyebrow">Knowledge base</p>
+            <h1 id="documents-title">Documents</h1>
+            <p>Upload a file, inspect its extracted text, and use it immediately in chat.</p>
+          </header>
+          <form id="uploadForm" class="upload-card">
+            <label for="documentFile">Choose a Markdown, TXT, or PDF file</label>
+            <div class="upload-controls">
+              <input id="documentFile" type="file" accept=".md,.markdown,.txt,.pdf" required>
+              <button type="submit">Upload document</button>
+            </div>
+          </form>
+          <div class="document-layout">
+            <section class="document-list-panel" aria-labelledby="document-list-title">
+              <div class="panel-heading">
+                <h2 id="document-list-title">In this workspace</h2>
+                <button id="refreshDocuments" class="secondary" type="button">Refresh</button>
+              </div>
+              <div id="documentList" class="document-list"></div>
+            </section>
+            <section class="preview-panel" aria-labelledby="preview-title">
+              <div class="panel-heading">
+                <h2 id="preview-title">Document preview</h2>
+                <span id="previewMeta"></span>
+              </div>
+              <pre id="documentPreview">Select a document to view its extracted text.</pre>
+            </section>
+          </div>
+        </section>
+
+        <section id="history" class="view" aria-labelledby="history-title">
+          <header class="view-header">
+            <p class="eyebrow">Your work</p>
+            <h1 id="history-title">Conversation history</h1>
+            <p>Only conversations created by your profile in this workspace appear here.</p>
+          </header>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

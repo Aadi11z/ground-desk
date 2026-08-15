@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     analytics,
-    benchmark,
+    auth,
     chat,
     client_config,
     documents,
@@ -17,7 +17,7 @@ from app.api.routes import (
 router = APIRouter(prefix="/api")
 
 router.include_router(analytics.router)
-router.include_router(benchmark.router)
+router.include_router(auth.router)
 router.include_router(chat.router)
 router.include_router(client_config.router)
 router.include_router(documents.router)

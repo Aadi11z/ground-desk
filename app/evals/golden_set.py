@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from app.core.models import ChatRequest
 from app.rag.generation.agent import SupportAgent
 
+from . import EVALUATION_SCOPE
+
 
 @dataclass(frozen=True)
 class EvalCase:
@@ -37,7 +39,7 @@ def run_evals(agent: SupportAgent) -> dict:
     escalations = 0
     for case in GOLDEN_SET:
         response = agent.answer(
-            ChatRequest(question=case.question), force_template=True
+            EVALUATION_SCOPE, ChatRequest(question=case.question), force_template=True
         )
         answer_text = response.answer.lower()
         term_hit = (

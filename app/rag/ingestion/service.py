@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.core.config import Settings
 from app.core.models import DocumentRecord
+from app.domain.tenancy import TenantScope
 from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.vector_store import (
     ChunkRecord,
@@ -32,6 +33,7 @@ class IngestionService:
 
     def ingest_path(
         self,
+        scope: TenantScope,
         path: Path,
         *,
         document_id: str | None = None,
@@ -48,18 +50,25 @@ class IngestionService:
             title=title,
             original_filename=original_filename,
         )
-        loaded = _with_metadata(loaded, metadata)
-        record = self.ingest_loaded(loaded, document_id=document_id)
+        loaded = _with_metadata(loaded, _scoped_metadata(scope, metadata))
+        record = self.ingest_loaded(scope, loaded, document_id=document_id)
         self.object_store.put(path, key=f"{record.document_id}{path.suffix.lower()}")
         return record
 
     def ingest_url(
-        self, url: str, *, metadata: dict[str, str] | None = None
+        self,
+        scope: TenantScope,
+        url: str,
+        *,
+        metadata: dict[str, str] | None = None,
     ) -> DocumentRecord:
-        return self.ingest_loaded(_with_metadata(load_url(url), metadata))
+        return self.ingest_loaded(
+            scope, _with_metadata(load_url(url), _scoped_metadata(scope, metadata))
+        )
 
     def create_uploaded_document(
         self,
+        scope: TenantScope,
         path: Path,
         *,
         original_filename: str,
@@ -67,6 +76,7 @@ class IngestionService:
     ) -> DocumentRecord:
         document_id = _new_document_id()
         return self.ingest_path(
+            scope,
             path,
             document_id=document_id,
             source_id=f"document:{document_id}",
@@ -78,13 +88,14 @@ class IngestionService:
 
     def replace_uploaded_document(
         self,
+        scope: TenantScope,
         document_id: str,
         path: Path,
         *,
         original_filename: str,
         metadata: dict[str, str] | None = None,
     ) -> DocumentRecord:
-        existing = self.store.get_document(document_id)
+        existing = self.store.get_document(scope, document_id)
         if existing is None:
             raise KeyError(f"Unknown document_id: {document_id}")
         if not existing.source_id.startswith("document:"):
@@ -94,6 +105,7 @@ class IngestionService:
         replacement_metadata = dict(existing.metadata)
         replacement_metadata.update(metadata or {})
         return self.ingest_path(
+            scope,
             path,
             document_id=document_id,
             source_id=existing.source_id,
@@ -104,11 +116,16 @@ class IngestionService:
         )
 
     def ingest_loaded(
-        self, loaded: LoadedDocument, *, document_id: str | None = None
+        self,
+        scope: TenantScope,
+        loaded: LoadedDocument,
+        *,
+        document_id: str | None = None,
     ) -> DocumentRecord:
+        loaded = _with_metadata(loaded, _scoped_metadata(scope, loaded.metadata))
         source_id = loaded.source_id or f"memory:{loaded.source}"
         content_hash = _sha256(loaded.text)
-        document_id = document_id or _document_id(source_id)
+        document_id = document_id or _document_id(scope.workspace_id, source_id)
         version_id = _version_id(content_hash)
         sections = loaded.sections or (
             LoadedSection(title=None, text=loaded.text, position=0),
@@ -141,6 +158,7 @@ class IngestionService:
                 page_number=chunk.page_number,
                 word_count=chunk.word_count,
                 content_hash=chunk.content_hash,
+                workspace_id=scope.workspace_id,
             )
             for chunk in chunks
         ]
@@ -178,25 +196,29 @@ class IngestionService:
                 "skipped_chunks": quality_report.skipped_chunks,
             },
             metadata=loaded.metadata,
+            workspace_id=scope.workspace_id,
         )
-        self.store.upsert_document(manifest, records, vector_batch.vectors)
+        self.store.upsert_document(scope, manifest, records, vector_batch.vectors)
         return _document_record(manifest)
 
     def ingest_sample_corpus(
-        self, *, metadata: dict[str, str] | None = None
+        self, scope: TenantScope, *, metadata: dict[str, str] | None = None
     ) -> list[DocumentRecord]:
         if not self.settings.sample_dir.exists():
             return []
         records = []
         for path in sorted(self.settings.sample_dir.glob("*")):
             if path.is_file() and path.suffix.lower() in {".md", ".txt", ".pdf"}:
-                records.append(self.ingest_path(path, metadata=metadata))
+                records.append(self.ingest_path(scope, path, metadata=metadata))
         return records
 
     def list_documents(
-        self, *, metadata_filter: dict[str, str] | None = None
+        self,
+        scope: TenantScope,
+        *,
+        metadata_filter: dict[str, str] | None = None,
     ) -> list[DocumentRecord]:
-        documents = self.store.list_documents()
+        documents = self.store.list_documents(scope)
         if metadata_filter:
             documents = [
                 document
@@ -204,7 +226,7 @@ class IngestionService:
                 if _metadata_matches_filter(
                     document.metadata,
                     metadata_filter,
-                    default_workspace_id=self.settings.default_workspace_id,
+                    default_workspace_id=scope.workspace_id,
                 )
             ]
         return [
@@ -251,6 +273,17 @@ def _with_metadata(
     )
 
 
+def _scoped_metadata(
+    scope: TenantScope, metadata: dict[str, str] | None
+) -> dict[str, str]:
+    merged = {str(key): str(value) for key, value in (metadata or {}).items()}
+    requested_workspace_id = merged.get("workspace_id")
+    if requested_workspace_id not in (None, scope.workspace_id):
+        raise ValueError("Document workspace does not match the tenant scope.")
+    merged["workspace_id"] = scope.workspace_id
+    return merged
+
+
 def _metadata_matches_filter(
     metadata: dict[str, str], filters: dict[str, str], *, default_workspace_id: str
 ) -> bool:
@@ -263,8 +296,8 @@ def _metadata_matches_filter(
     return True
 
 
-def _document_id(source_id: str) -> str:
-    return f"doc_{_sha256(source_id)[:12]}"
+def _document_id(workspace_id: str, source_id: str) -> str:
+    return f"doc_{_sha256(f'{workspace_id}:{source_id}')[:12]}"
 
 
 def _new_document_id() -> str:

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from app.core.config import Settings
 from app.core.models import ChatRequest, ChatResponse, Citation
 from app.core.safety import redact_secrets, strip_prompt_injection
+from app.domain.tenancy import TenantScope
 from app.rag.retrieval.embeddings import EmbeddingModel
 from app.rag.retrieval.lexical import tokenize
 from app.rag.retrieval.retriever import HybridRetriever
@@ -43,6 +44,7 @@ class SupportAgent:
 
     def answer(
         self,
+        scope: TenantScope,
         request: ChatRequest,
         *,
         force_template: bool = False,
@@ -50,18 +52,33 @@ class SupportAgent:
     ) -> ChatResponse:
         trace_id = uuid.uuid4().hex[:12]
         start = time.time()
+        if _workspace_has_no_documents(
+            self.store,
+            scope,
+        ):
+            return ChatResponse(
+                answer=(
+                    "No documents have been uploaded to this workspace yet. "
+                    "Go to Documents to upload a Markdown, TXT, or PDF file, "
+                    "then ask a question about it."
+                ),
+                citations=[],
+                confidence=0.0,
+                evidence_status="no_documents",
+                needs_escalation=False,
+                suggested_ticket_reply=None,
+                generation_model=None,
+                trace_id=trace_id,
+            )
         safe_context = _safe_conversation_context(
             conversation_context or [],
             max_messages=max(0, self.settings.conversation_context_turns * 2),
         )
         retrieval_query = _retrieval_query(request.question, safe_context)
         query_vectors = self.embeddings.encode_queries([retrieval_query])
-        document_ids = _matching_document_ids(
-            self.store,
-            request,
-            default_workspace_id=self.settings.default_workspace_id,
-        )
+        document_ids = _matching_document_ids(self.store, scope, request)
         results = self.retriever.retrieve(
+            scope,
             retrieval_query,
             query_vectors.vectors,
             top_k=request.top_k,
@@ -169,13 +186,16 @@ def _snippet(text: str, limit: int = 260) -> str:
 
 
 def _matching_document_ids(
-    store: VectorStoreBackend, request: ChatRequest, *, default_workspace_id: str
+    store: VectorStoreBackend, scope: TenantScope, request: ChatRequest
 ) -> set[str] | None:
     filters = request.filters
     if filters is None:
         return None
+    requested_workspace_id = filters.metadata.get("workspace_id")
+    if requested_workspace_id not in (None, scope.workspace_id):
+        raise ValueError("Requested workspace does not match the tenant scope.")
     matched = []
-    for document in store.list_documents():
+    for document in store.list_documents(scope):
         if filters.document_ids and document.document_id not in filters.document_ids:
             continue
         if filters.source_types and document.source_type not in filters.source_types:
@@ -183,10 +203,7 @@ def _matching_document_ids(
         if filters.titles and document.title not in filters.titles:
             continue
         if any(
-            _metadata_value(
-                document.metadata, key, default_workspace_id=default_workspace_id
-            )
-            != value
+            _metadata_value(document.metadata, key) != value
             for key, value in filters.metadata.items()
         ):
             continue
@@ -194,11 +211,12 @@ def _matching_document_ids(
     return set(matched)
 
 
-def _metadata_value(
-    metadata: dict[str, str], key: str, *, default_workspace_id: str
-) -> str | None:
-    if key == "workspace_id":
-        return metadata.get(key) or default_workspace_id
+def _workspace_has_no_documents(store: VectorStoreBackend, scope: TenantScope) -> bool:
+    """Identify an empty workspace without treating other retrieval failures as empty."""
+    return not store.list_documents(scope)
+
+
+def _metadata_value(metadata: dict[str, str], key: str) -> str | None:
     return metadata.get(key)
 
 
