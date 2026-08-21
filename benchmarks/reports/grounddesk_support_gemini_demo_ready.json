@@ -1,7 +1,7 @@
 {
   "created_at": "2026-05-27T00:16:36.975217+00:00",
   "configuration": {
-    "sample_dir": "sample_corpus",
+    "corpus_dir": "corpus",
     "embedding_provider": "gemini",
     "embedding_model": "gemini-embedding-2",
     "embedding_backend": "gemini",
@@ -30,7 +30,7 @@
       "dataset": {
         "name": "grounddesk_support_v1",
         "version": "1.0",
-        "corpus": "sample_corpus",
+        "corpus": "corpus",
         "review_status": "engineer-authored baseline; manually review before presenting results as release quality",
         "cases": 21,
         "answerable_cases": 16,

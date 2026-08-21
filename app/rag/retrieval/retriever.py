@@ -168,12 +168,18 @@ class HybridRetriever:
                 query_embeddings,
                 top_k=max(top_k, self.settings.dense_candidate_k),
             )
-            return self._compress(
-                query, self._final_rerank(query, reranked, top_k=top_k)
+            return self._finalize_results(
+                scope,
+                query,
+                self._final_rerank(query, reranked, top_k=top_k),
+                top_k=top_k,
             )
         if mode == "sparse":
-            return self._compress(
-                query, self._final_rerank(query, sparse_results, top_k=top_k)
+            return self._finalize_results(
+                scope,
+                query,
+                self._final_rerank(query, sparse_results, top_k=top_k),
+                top_k=top_k,
             )
         fused = _reciprocal_rank_fusion(
             dense_results,
@@ -189,7 +195,12 @@ class HybridRetriever:
             query_embeddings,
             top_k=max(top_k, self.settings.dense_candidate_k),
         )
-        return self._compress(query, self._final_rerank(query, reranked, top_k=top_k))
+        return self._finalize_results(
+            scope,
+            query,
+            self._final_rerank(query, reranked, top_k=top_k),
+            top_k=top_k,
+        )
 
     def _search_sparse(
         self,
@@ -331,6 +342,16 @@ class HybridRetriever:
             results,
             max_sentences=self.settings.context_max_sentences,
         )
+
+    def _finalize_results(
+        self,
+        scope: TenantScope,
+        query: str,
+        results: list[SearchResult],
+        *,
+        top_k: int,
+    ) -> list[SearchResult]:
+        return self._compress(query, results)
 
     def _embeddings_for(
         self,

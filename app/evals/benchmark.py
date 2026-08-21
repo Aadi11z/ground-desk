@@ -1,6 +1,6 @@
 """Benchmark evaluation against externally labelled retrieval datasets.
 
-This module intentionally keeps benchmark state separate from the live demo
+This module intentionally keeps benchmark state separate from the live product
 index.  It reads the BEIR corpus/query/qrels format, builds an ephemeral
 GroundDesk-compatible index, and evaluates ranked document retrieval.
 """

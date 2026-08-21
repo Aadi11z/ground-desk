@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--publish-summary",
         type=Path,
-        help="Optional compact JSON artifact for the public demo; excludes per-query failure details.",
+        help="Optional compact JSON artifact for a public summary; excludes per-query failure details.",
     )
     return parser.parse_args()
 

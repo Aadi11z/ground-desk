@@ -277,7 +277,7 @@ def _assess_evidence(
 ) -> EvidenceAssessment:
     """Fail closed when retrieved chunks do not visibly support the question.
 
-    This is an auditable gate for the demo/product baseline. It intentionally
+    This is an auditable gate for the product baseline. It intentionally
     trades some semantic recall for avoiding unsupported generated answers.
     A calibrated verifier can later replace it after labelled evaluation.
     """

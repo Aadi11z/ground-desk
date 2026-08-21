@@ -2,7 +2,7 @@
   "name": "grounddesk_support_v1",
   "version": "1.0",
   "description": "Product-specific evaluation cases for the bundled GroundDesk support corpus. This set tests evidence selection, answer coverage, escalation behavior, and follow-up context.",
-  "corpus": "sample_corpus",
+  "corpus": "corpus",
   "review_status": "engineer-authored baseline; manually review before presenting results as release quality",
   "cases": [
     {

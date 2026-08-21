@@ -16,7 +16,7 @@ from app.rag.retrieval.vector_store import (
 )
 
 from .chunking import chunk_sections
-from .loaders import LoadedDocument, LoadedSection, load_path, load_url
+from .loaders import LoadedDocument, LoadedSection, load_path
 from .quality import assess_sections, build_report, filter_chunks
 from .storage import LocalObjectStore
 
@@ -54,17 +54,6 @@ class IngestionService:
         record = self.ingest_loaded(scope, loaded, document_id=document_id)
         self.object_store.put(path, key=f"{record.document_id}{path.suffix.lower()}")
         return record
-
-    def ingest_url(
-        self,
-        scope: TenantScope,
-        url: str,
-        *,
-        metadata: dict[str, str] | None = None,
-    ) -> DocumentRecord:
-        return self.ingest_loaded(
-            scope, _with_metadata(load_url(url), _scoped_metadata(scope, metadata))
-        )
 
     def create_uploaded_document(
         self,
@@ -201,13 +190,13 @@ class IngestionService:
         self.store.upsert_document(scope, manifest, records, vector_batch.vectors)
         return _document_record(manifest)
 
-    def ingest_sample_corpus(
+    def ingest_trial_corpus(
         self, scope: TenantScope, *, metadata: dict[str, str] | None = None
     ) -> list[DocumentRecord]:
-        if not self.settings.sample_dir.exists():
+        if not self.settings.corpus_dir.exists():
             return []
         records = []
-        for path in sorted(self.settings.sample_dir.glob("*")):
+        for path in sorted(self.settings.corpus_dir.glob("*")):
             if path.is_file() and path.suffix.lower() in {".md", ".txt", ".pdf"}:
                 records.append(self.ingest_path(scope, path, metadata=metadata))
         return records

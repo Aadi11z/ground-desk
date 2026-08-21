@@ -204,7 +204,7 @@ def report_as_markdown(report: dict) -> str:
         "",
         "## Interpretation Boundary",
         "",
-        "- This is a small product-specific evaluation over the bundled demo knowledge base; it is useful for regression and demonstration, not a customer-scale accuracy claim.",
+        "- This is a small product-specific evaluation over the bundled knowledge base; it is useful for regression, not a customer-scale accuracy claim.",
         "- Relevant evidence and escalation labels are explicit. Expected answer-term coverage is a proxy and does not replace human judgement of generated-answer correctness.",
         "- In `template` mode the report tests the retrieval/evidence/escalation pipeline deterministically; run Gemini mode and manually review outputs before discussing live-generation quality.",
         "- Follow-up comparison measures whether stored conversational context improves evidence selection for underspecified later questions.",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from .chunking import TextChunk
@@ -32,8 +31,6 @@ def assess_sections(
         warnings.append(f"skipped_empty_sections:{empty_sections}")
     if document.source_type == "pdf" and not usable_sections:
         warnings.append("pdf_no_extractable_text_possible_ocr_needed")
-    if document.source_type == "url" and _looks_like_low_value_url_page(document.text):
-        warnings.append("url_content_looks_low_value_or_blocked")
     return usable_sections, warnings, empty_sections
 
 
@@ -75,16 +72,3 @@ def build_report(
         empty_sections=empty_sections,
         rejected=rejected,
     )
-
-
-def _looks_like_low_value_url_page(text: str) -> bool:
-    lowered = re.sub(r"\s+", " ", text.lower()).strip()
-    signals = [
-        "javascript is disabled",
-        "enable javascript",
-        "sign in to continue",
-        "access denied",
-        "unsupported browser",
-        "please log in",
-    ]
-    return any(signal in lowered for signal in signals)

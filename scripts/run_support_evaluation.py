@@ -23,6 +23,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.core.config import Settings  # noqa: E402
+from app.domain.permissions import WorkspaceRole  # noqa: E402
+from app.domain.tenancy import TenantScope  # noqa: E402
 from app.evals.support_dataset import (  # noqa: E402
     evaluate_support_dataset,
     load_support_dataset,
@@ -43,7 +45,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("benchmarks/datasets/grounddesk_support_v1.json"),
     )
-    parser.add_argument("--sample-dir", type=Path, default=Path("sample_corpus"))
+    parser.add_argument("--corpus-dir", type=Path, default=Path("corpus"))
     parser.add_argument(
         "--modes",
         default="hybrid",
@@ -127,7 +129,7 @@ def main() -> None:
         or args.query_planner_provider == "gemini"
     ) and not args.allow_provider_api_calls:
         raise SystemExit(
-            "Gemini mode sends the demo corpus/questions to the provider and uses API "
+            "Gemini mode sends the evaluation corpus/questions to the provider and uses API "
             "quota. Re-run with --allow-provider-api-calls after confirming this is intended."
         )
     modes = tuple(
@@ -189,7 +191,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="grounddesk-support-eval-") as tmp_dir:
         settings = Settings(
             data_dir=Path(tmp_dir) / "data",
-            sample_dir=args.sample_dir,
+            corpus_dir=args.corpus_dir,
             embedding_model=args.embedding_model,
             embedding_provider=args.embedding_provider,
             embedding_dimensions=dimensions,
@@ -215,11 +217,14 @@ def main() -> None:
         )
         store = LocalVectorStore(settings.index_dir)
         ingestion = IngestionService(settings, embeddings, store)
-        documents = ingestion.ingest_sample_corpus(
-            metadata={"workspace_id": settings.default_workspace_id}
+        evaluation_scope = TenantScope(
+            workspace_id="evaluation",
+            user_id="evaluation-runner",
+            role=WorkspaceRole.OWNER,
         )
+        documents = ingestion.ingest_trial_corpus(evaluation_scope)
         if not documents:
-            raise SystemExit(f"No source documents found under {args.sample_dir}.")
+            raise SystemExit(f"No source documents found under {args.corpus_dir}.")
         if args.embedding_provider == "gemini" and embeddings.backend != "gemini":
             raise SystemExit(
                 "Gemini embedding backend was requested but unavailable; evaluation aborted."
@@ -278,7 +283,7 @@ def main() -> None:
     report = {
         "created_at": datetime.now(UTC).isoformat(),
         "configuration": {
-            "sample_dir": str(args.sample_dir),
+            "corpus_dir": str(args.corpus_dir),
             "embedding_provider": args.embedding_provider,
             "embedding_model": args.embedding_model,
             "embedding_backend": embeddings.backend,
@@ -327,7 +332,7 @@ def _checkpoint_signature(
 ) -> dict:
     return {
         "dataset": str(args.dataset),
-        "sample_dir": str(args.sample_dir),
+        "corpus_dir": str(args.corpus_dir),
         "modes": list(modes),
         "embedding_provider": args.embedding_provider,
         "embedding_model": args.embedding_model,

@@ -8,7 +8,7 @@
 ### Results
 
 - **Dataset:** `grounddesk_support_v1` v1.0
-- **Corpus:** `sample_corpus`
+- **Corpus:** `corpus`
 - **Cases:** 21 (16 answerable, 5 no-answer/ambiguous, 5 follow-up)
 - **Review status:** engineer-authored baseline; manually review before presenting results as release quality
 - **Generation mode:** `provider`
