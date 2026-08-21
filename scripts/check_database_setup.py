@@ -1,4 +1,4 @@
-"""Verify an Alembic-managed GroundDesk database and optionally seed demo state."""
+"""Verify an Alembic-managed GroundDesk database and optionally seed a member."""
 
 from __future__ import annotations
 
@@ -38,18 +38,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     settings = Settings()
-    if settings.persistence_backend.lower() != "database":
-        raise SystemExit(
-            "Set PERSISTENCE_BACKEND=database and DATABASE_URL before checking PostgreSQL."
-        )
     repository = DatabaseProductRepository(settings.database_url)
     _assert_alembic_at_head(repository)
     repository.healthcheck()
-    if settings.auth_mode.lower() == "supabase" or args.member_user_id:
-        repository.auth_healthcheck()
+    repository.auth_healthcheck()
 
-    workspace_id = args.workspace_id or settings.default_workspace_id
-    if args.workspace_id or args.member_user_id:
+    workspace_id = args.workspace_id
+    if workspace_id or args.member_user_id:
+        if not workspace_id:
+            raise SystemExit("--workspace-id is required when seeding a member.")
         _seed_workspace(
             repository,
             workspace_id=workspace_id,
@@ -67,7 +64,6 @@ def main() -> None:
         json.dumps(
             {
                 "database": "ready",
-                "auth_mode": settings.auth_mode.lower(),
                 "workspace_id": workspace_id,
                 "member_seeded": bool(args.member_user_id),
                 "membership_role": membership,

@@ -13,15 +13,23 @@ citations, and escalates when the evidence is weak or missing.
 | Area | State |
 | --- | --- |
 | API structure | FastAPI factory in `app/main.py`; lifespan-owned services from `app/bootstrap.py`; modular routers in `app/api`. |
-| Ingestion | Markdown, TXT, PDF text extraction, public HTTP(S) URLs, chunking, quality checks, document/version identity. |
-| Retrieval | Local vector store, optional Qdrant adapter, dense retrieval, BM25-style lexical retrieval, hybrid fusion, reranking hooks, context compression. |
+| Ingestion | Markdown, TXT, and PDF text extraction, chunking, quality checks, and document/version identity. |
+| Retrieval | Local vector store, optional Qdrant adapter, dense retrieval, BM25-style lexical retrieval, hybrid fusion, and context compression. |
 | Generation | Gemini provider, deterministic test provider, citations, evidence status, escalation, suggested ticket replies. |
-| Persistence | Local SQLite demo state; Alembic revisions define the product schema for profiles, organizations, workspaces, memberships, conversations, messages, traces, and feedback. The verified migration checks are SQLite-only, not PostgreSQL or RLS proof. |
-| Access | Login-gated Demo User session locally; Supabase token/membership foundation and transactional workspace onboarding for hosted configuration. |
-| Product interface | Dependency-free static HTML/CSS/JavaScript interface at `/` with login, workspace registration, workspace switching, Ask, Documents, and personal History views. |
-| API features | Health, client config, documents, chat, feedback, history, analytics, evaluations, workflows, and workspace listing routes. |
+| Persistence | Supabase/PostgreSQL-shaped persistence; Alembic revisions define the product schema for profiles, organizations, workspaces, memberships, conversations, messages, traces, and feedback. The verified migration checks are SQLite-only, not PostgreSQL or RLS proof. |
+| Access | Supabase token verification, membership enforcement, and transactional workspace onboarding. |
+| Product interface | Separate React/TypeScript/Vite interface in `frontend/`; FastAPI exposes API and health routes only. The local Vite server proxies API requests during development. |
+| API features | Health, client config, authenticated identity/workspace listing, document upload/lifecycle, and chat. |
 | Evaluation | Regression tests, support evaluation set, retrieval evaluation, and benchmark scripts. |
-| Local operation | Locked `uv` commands, Python 3.14.6 non-root Docker runtime, Makefile, persisted Demo User/workspace, and runtime document upload. |
+| Local operation | Locked `uv` commands, Python 3.14.6 non-root Docker runtime, Supabase-backed configuration, and runtime document upload. |
+
+## Active MVP Boundary
+
+The current product surface is intentionally limited to organization sign-in,
+authorized workspace selection, document upload and lifecycle, hybrid retrieval,
+and cited chat with safe escalation. Evaluation tooling remains internal; URL
+ingestion, trial-corpus loading, feedback/history/analytics APIs, support
+workflows, and experimental graph retrieval are deferred.
 
 ## Verified
 
@@ -38,8 +46,9 @@ Row-Level Security (RLS) policies.
 
 ## Not Production-Ready
 
-- The static interface is intentionally small; it is not yet the planned
-  separate TypeScript frontend.
+- The React interface is local-development ready; Cloudflare Pages deployment,
+  production CORS configuration, and browser end-to-end coverage remain work
+  to complete before calling it a hosted frontend.
 - Document uploads run synchronously and use local temporary files.
 - Document metadata and chunks are not yet managed through a complete
   tenant-safe SQLAlchemy production model.
@@ -51,8 +60,8 @@ Row-Level Security (RLS) policies.
 - Document preview shows extracted text only; it is not yet a full source
   viewer with exact document/page highlighting.
 - Rate limiting, audit logging, and complete monitoring are still pending.
-- The deployment configuration is demo-oriented; Cloud Run and Cloudflare Pages
-  are planned, not the current frontend/backend runtime.
+- Cloud Run and Cloudflare Pages deployment configuration remains planned rather
+  than the current frontend/backend runtime.
 
 ## Current Runtime Flow
 
@@ -63,7 +72,7 @@ validated settings
   -> request dependency providers
   -> existing RAG services in app.rag
   -> local/Qdrant vector storage
-  -> JSONL/PostgreSQL interaction persistence
+  -> PostgreSQL interaction persistence
 ```
 
 The RAG pipeline was moved under `app/rag` without being rewritten.

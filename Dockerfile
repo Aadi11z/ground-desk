@@ -5,8 +5,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /uvx /bin/
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/app/grounddesk_data \
-    FEEDBACK_PATH=/app/grounddesk_data/feedback.jsonl \
-    CHAT_HISTORY_PATH=/app/grounddesk_data/chat_history.jsonl \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -21,7 +19,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY --chown=grounddesk:grounddesk app ./app
-COPY --chown=grounddesk:grounddesk sample_corpus ./sample_corpus
+COPY --chown=grounddesk:grounddesk corpus ./corpus
 COPY --chown=grounddesk:grounddesk benchmarks/datasets ./benchmarks/datasets
 COPY --chown=grounddesk:grounddesk benchmarks/reports ./benchmarks/reports
 

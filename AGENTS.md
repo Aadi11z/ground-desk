@@ -31,8 +31,8 @@ Preserve these behaviors:
 | Deployment | Cloud Run API/worker, Cloudflare Pages frontend, GitHub Actions |
 | Operations | Structured redacted logs, Sentry, explicit latency/cost/security metrics |
 
-Today, local files, synchronous ingestion, and some demo/admin-key behavior
-still exist. Migrate them only in the order defined by the plan.
+Today, local files, synchronous ingestion, and some temporary admin-key
+behavior still exist. Migrate them only in the order defined by the plan.
 
 ## Dependency Direction
 
@@ -55,6 +55,23 @@ bootstrap/lifespan -> concrete adapters
 
 Do not create empty layers in advance. Move one tested vertical capability at a
 time and keep compatibility imports temporary and tracked for removal.
+
+## Code Style
+
+Write for maintainers, not for the fewest lines. Prefer descriptive names,
+explicit control flow, and small single-purpose functions over clever or dense
+expressions. Introduce well-named intermediate variables when they make a
+calculation, condition, or data transformation easier to follow.
+
+- Use early returns to avoid unnecessary nesting.
+- Split non-trivial logic into focused helpers; keep related behavior together
+  rather than creating abstractions speculatively.
+- Avoid nested ternaries, overly dense comprehensions, and unexplained
+  abbreviations when ordinary statements are clearer.
+- Add a short comment only for non-obvious intent, invariants, or security
+  constraints; do not restate the code.
+- Let Ruff handle layout and imports. Do not trade clarity for fewer lines or
+  micro-optimizations without measured evidence.
 
 ## Non-Negotiable Rules
 
