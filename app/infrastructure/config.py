@@ -17,9 +17,8 @@ NonNegativeFloat = Annotated[float, Field(ge=0)]
 class Settings(BaseSettings):
     """GroundDesk runtime configuration.
 
-    Environment values are parsed once at startup. Local/demo defaults remain
-    intentionally usable, while ``APP_ENV=production`` rejects unsafe fallback
-    adapters before the application accepts traffic.
+    Environment values are parsed once at startup. Production rejects unsafe
+    fallback adapters before the application accepts traffic.
     """
 
     model_config = SettingsConfigDict(
@@ -39,11 +38,8 @@ class Settings(BaseSettings):
         default="development",
         validation_alias="APP_ENV",
     )
-    # The local product starts with an empty workspace. The bundled corpus is
-    # retained for tests and evaluations, but is never user-facing seed data.
-    demo_bootstrap_sample_corpus: bool = False
     data_dir: Path = Path("data")
-    sample_dir: Path = Path("sample_corpus")
+    corpus_dir: Path = Field(default=Path("corpus"), validation_alias="CORPUS_DIR")
 
     embedding_model: str = "gemini-embedding-2"
     embedding_provider: str = "auto"
@@ -60,15 +56,10 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     conversation_context_turns: PositiveInt = 4
 
-    auth_mode: Literal["demo", "supabase"] = "demo"
     supabase_url: AnyHttpUrl | None = None
     supabase_publishable_key: str | None = None
     supabase_jwt_audience: str = "authenticated"
     admin_api_key: SecretStr | None = None
-    default_workspace_id: str = "demo"
-    demo_user_id: str = "00000000-0000-0000-0000-000000000001"
-    demo_user_name: str = "Demo User"
-    demo_user_email: str = "demo@grounddesk.local"
 
     max_context_chunks: PositiveInt = 5
     retrieval_mode: Literal["dense", "sparse", "hybrid", "adaptive", "planned"] = (
@@ -97,9 +88,7 @@ class Settings(BaseSettings):
     qdrant_api_key: SecretStr | None = None
     qdrant_collection: str = "grounddesk_chunks"
 
-    feedback_path: Path = Path("data/feedback.jsonl")
-    chat_history_path: Path = Path("data/chat_history.jsonl")
-    persistence_backend: Literal["jsonl", "database"] = "jsonl"
+    persistence_backend: Literal["database"] = "database"
     database_url: str = ""
     database_auto_create: bool = False
     database_pool_size: PositiveInt = 5
@@ -161,8 +150,6 @@ class Settings(BaseSettings):
             return self
 
         missing: list[str] = []
-        if self.auth_mode != "supabase":
-            missing.append("AUTH_MODE=supabase")
         if self.persistence_backend != "database":
             missing.append("PERSISTENCE_BACKEND=database")
         if not self.database_url:
@@ -177,8 +164,6 @@ class Settings(BaseSettings):
             missing.append("DATABASE_AUTO_CREATE=false")
         if self.admin_api_key is not None:
             missing.append("ADMIN_API_KEY must be unset")
-        if self.demo_user_email != "demo@grounddesk.local":
-            missing.append("Demo user settings must use their development defaults")
         if missing:
             raise ValueError(
                 "Production configuration is incomplete or unsafe: "

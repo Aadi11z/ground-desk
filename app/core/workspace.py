@@ -15,8 +15,8 @@ from .models import ChatRequest, RetrievalFilters
 _WORKSPACE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
 
-def normalize_workspace_id(value: str | None, *, default: str) -> str:
-    workspace_id = (value or default).strip()
+def normalize_workspace_id(value: str | None, *, default: str | None) -> str:
+    workspace_id = (value or default or "").strip()
     if not _WORKSPACE_PATTERN.fullmatch(workspace_id):
         raise ValueError(
             "Workspace IDs must be 1-64 characters and contain only letters, numbers, underscores, or hyphens."

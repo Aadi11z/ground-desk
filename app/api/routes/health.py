@@ -1,14 +1,8 @@
-"""Public process probes and private dependency diagnostics."""
+"""Public process probes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import (
-    get_access_controller,
-    get_app_settings,
-    get_product_repository,
-    get_vector_store,
-    require_admin,
-)
+from app.api.dependencies import get_app_settings
 from app.core.models import HealthResponse
 from app.infrastructure.config import Settings
 
@@ -17,7 +11,6 @@ router = APIRouter(
     tags=["health"],
     responses={status.HTTP_404_NOT_FOUND: {"message": "Page not found!"}},
 )
-internal_router = APIRouter(prefix="/internal/health", tags=["internal-health"])
 
 
 @router.get("", response_model=HealthResponse)
@@ -46,22 +39,3 @@ def ready(settings: Settings = Depends(get_app_settings)):
     or storage calls. Platform probes therefore cannot create provider traffic.
     """
     return {"status": "ok", "environment": settings.app_environment}
-
-
-@internal_router.get("/dependencies", dependencies=[Depends(require_admin)])
-def dependency_diagnostics(
-    store=Depends(get_vector_store),
-    repository=Depends(get_product_repository),
-    access_controller=Depends(get_access_controller),
-):
-    """Perform bounded, authenticated checks without exposing error details."""
-    try:
-        # Do not aggregate tenant-owned data in a process diagnostic.
-        _ = store.embedding_dimension
-        repository.healthcheck()
-        access_controller.healthcheck_configuration()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503, detail="Dependencies are unavailable."
-        ) from exc
-    return {"status": "ok"}

@@ -13,7 +13,6 @@ from app.core.config import Settings
 from app.core.models import ChatRequest, ChatResponse, FeedbackRequest
 from app.core.persistence import (
     DatabaseProductRepository,
-    JsonlProductRepository,
     analytics_for,
     normalize_database_url,
 )
@@ -24,7 +23,6 @@ from app.core.workspace import (
     normalize_workspace_id,
 )
 from app.evals import EVALUATION_SCOPE
-from app.evals.answers import run_answer_quality_evals
 from app.evals.benchmark import (
     build_benchmark_index,
     build_benchmark_report,
@@ -41,8 +39,6 @@ from app.evals.support_dataset import (
     evaluate_support_dataset,
     load_support_dataset,
 )
-from app.evals.synthetic import generate_synthetic_eval_dataset
-from app.evals.variants import compare_retrieval_variants
 from app.rag.generation.agent import (
     SupportAgent,
     _retrieval_query,
@@ -54,7 +50,6 @@ from app.rag.generation.llm import (
 from app.rag.generation.llm import (
     _is_retryable_gemini_error as generation_retryable,
 )
-from app.rag.generation.workflows import SupportWorkflowService
 from app.rag.ingestion.loaders import LoadedDocument
 from app.rag.ingestion.service import IngestionService
 from app.rag.retrieval.adaptive import AdaptiveQueryPlanner, StructuredQueryPlanner
@@ -77,7 +72,7 @@ from app.rag.retrieval.vector_store import (
 def make_agent(tmp_path: Path):
     settings = Settings(
         data_dir=tmp_path / "data",
-        sample_dir=tmp_path / "samples",
+        corpus_dir=tmp_path / "corpus",
         generation_provider="template",
     )
     embeddings = EmbeddingModel("unit-test")
@@ -369,26 +364,10 @@ def test_short_chunks_are_skipped_with_warning(tmp_path):
     assert len(store.records) == 0
 
 
-def test_low_value_url_text_is_indexed_with_warning(tmp_path):
-    ingestion, _, _ = make_agent(tmp_path)
-    record = ingestion.ingest_loaded(
-        LoadedDocument(
-            title="Blocked",
-            text="JavaScript is disabled. Please enable JavaScript or switch to a supported browser to continue.",
-            source_type="url",
-            source="https://example.com",
-            source_id="url:https://example.com",
-        )
-    )
-
-    assert record.status == "indexed_with_warnings"
-    assert "url_content_looks_low_value_or_blocked" in record.warnings
-
-
 def test_vector_store_factory_defaults_to_local_backend(tmp_path):
     settings = Settings(
         data_dir=tmp_path / "data",
-        sample_dir=tmp_path / "samples",
+        corpus_dir=tmp_path / "corpus",
         generation_provider="template",
         vector_store_backend="local",
     )
@@ -905,31 +884,6 @@ def test_final_reranker_prefers_lexical_overlap():
     assert ranked[0].record.chunk_id == "exact"
 
 
-def test_workflow_service_and_extended_evals(tmp_path):
-    ingestion, agent, store = make_agent(tmp_path)
-    ingestion.ingest_loaded(
-        LoadedDocument(
-            title="Billing",
-            text="Annual plans can be refunded within 14 days. Escalate exceptions to billing.",
-            source_type="txt",
-            source="memory",
-            source_id="memory:billing-workflow",
-        )
-    )
-    workflows = SupportWorkflowService(agent)
-
-    assert (
-        workflows.summarize_conversation(["Hello", "Can I get a refund?"])["turns"] == 2
-    )
-    assert workflows.faq_from_document("Billing", store.records[0].text)["faqs"]
-    assert "outline" in workflows.suggest_support_article(
-        EVALUATION_SCOPE, "Can you configure payroll?"
-    )
-    assert "faithfulness" in run_answer_quality_evals(agent)
-    assert generate_synthetic_eval_dataset(store.records)["num_examples"] >= 2
-    assert "variants" in compare_retrieval_variants(agent)
-
-
 def test_gemini_without_api_key_falls_back_without_sentence_transformer(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     embeddings = EmbeddingModel("gemini-embedding-2", provider="auto")
@@ -990,8 +944,8 @@ def test_workspace_helpers_force_workspace_scope():
 
     assert scoped.filters is not None
     assert scoped.filters.metadata == {"plan": "plus", "workspace_id": "alpha"}
-    assert normalize_workspace_id(None, default="demo") == "demo"
-    assert metadata_matches_workspace({}, "demo", default="demo")
+    assert normalize_workspace_id(None, default="alpha") == "alpha"
+    assert metadata_matches_workspace({}, "alpha", default="alpha")
 
 
 def test_unsupported_queries_retrieve_for_audit_but_fail_evidence_gate(tmp_path):
@@ -1154,58 +1108,6 @@ def test_database_feedback_rejects_unknown_or_cross_workspace_trace(tmp_path):
         )
 
 
-def test_demo_jsonl_persistence_loads_conversation_context(tmp_path):
-    repository = JsonlProductRepository(
-        tmp_path / "feedback.jsonl", tmp_path / "history.jsonl"
-    )
-    response = ChatResponse(
-        answer="Invoices are under Settings > Billing.",
-        citations=[],
-        confidence=0.7,
-        needs_escalation=False,
-        trace_id="trace_demo",
-    )
-    conversation_id = repository.record_answer(
-        "demo", ChatRequest(question="Where are invoices?"), response
-    )
-
-    messages = repository.get_conversation_messages("demo", conversation_id)
-
-    assert messages == [
-        {"role": "user", "content": "Where are invoices?"},
-        {"role": "assistant", "content": "Invoices are under Settings > Billing."},
-    ]
-    with pytest.raises(ValueError):
-        repository.get_conversation_messages("demo", "conv_missing")
-
-
-def test_public_demo_access_is_fixed_to_default_workspace(tmp_path):
-    settings = Settings(
-        auth_mode="demo",
-        default_workspace_id="demo",
-        feedback_path=tmp_path / "feedback.jsonl",
-        chat_history_path=tmp_path / "history.jsonl",
-    )
-    repository = JsonlProductRepository(
-        settings.feedback_path, settings.chat_history_path
-    )
-    controller = AccessController(settings, repository)
-
-    assert (
-        controller.resolve(
-            authorization="Bearer grounddesk-demo-session", requested_workspace_id=None
-        ).workspace_id
-        == "demo"
-    )
-    with pytest.raises(AccessError):
-        controller.resolve(
-            authorization="Bearer grounddesk-demo-session",
-            requested_workspace_id="acme",
-        )
-    with pytest.raises(AccessError):
-        controller.resolve(authorization=None, requested_workspace_id="demo")
-
-
 def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path):
     user_id = "11111111-1111-1111-1111-111111111111"
 
@@ -1215,13 +1117,11 @@ def test_supabase_access_requires_workspace_membership_and_owns_history(tmp_path
             return AuthenticatedUser(user_id=user_id, email="agent@acme.test")
 
     settings = Settings(
-        auth_mode="supabase",
         persistence_backend="database",
         database_url=f"sqlite:///{tmp_path / 'grounddesk.db'}",
         database_auto_create=True,
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable",
-        default_workspace_id="acme",
     )
     repository = DatabaseProductRepository(
         settings.database_url, auto_create=settings.database_auto_create
@@ -1295,7 +1195,7 @@ def test_product_support_dataset_covers_followups_and_no_answer_cases():
 
 def test_product_support_evaluation_scores_actual_agent_and_followup_context(tmp_path):
     ingestion, agent, _ = make_agent(tmp_path)
-    for path in sorted(Path("sample_corpus").glob("*.md")):
+    for path in sorted(Path("corpus").glob("*.md")):
         ingestion.ingest_path(path)
     dataset = load_support_dataset(
         Path("benchmarks/datasets/grounddesk_support_v1.json")

@@ -1,20 +1,12 @@
-"""Persistence repositories for product interactions and feedback.
-
-The JSONL implementation remains a zero-setup development fallback.  The
-database implementation is the production-shaped path: PostgreSQL owns
-conversation, answer-trace, and feedback state while Qdrant continues to own
-retrievable vector payloads.
-"""
+"""Database persistence for product interactions and feedback."""
 
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from contextlib import contextmanager
 from copy import copy
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Protocol
 
 from app.domain.permissions import WorkspaceRole
@@ -78,159 +70,6 @@ class ProductRepository(Protocol):
         organization_name: str,
         workspace_name: str,
     ) -> dict: ...
-
-    def ensure_demo_identity(
-        self, *, user_id: str, email: str, display_name: str, workspace_id: str
-    ) -> None: ...
-
-
-class JsonlRepository:
-    """Append-only local storage retained for development and fallback use."""
-
-    def __init__(self, path: Path):
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-    def append(self, payload: dict) -> None:
-        enriched = {"created_at": _utcnow_iso(), **payload}
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(enriched, ensure_ascii=False) + "\n")
-
-    def read_all(self) -> list[dict]:
-        if not self.path.exists():
-            return []
-        return [
-            json.loads(line)
-            for line in self.path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-
-
-class JsonlProductRepository:
-    """Local adapter matching the database product repository contract."""
-
-    def __init__(self, feedback_path: Path, chat_history_path: Path):
-        self.feedback = JsonlRepository(feedback_path)
-        self.history = JsonlRepository(chat_history_path)
-
-    def bind_session(self, session) -> JsonlProductRepository:
-        return self
-
-    def healthcheck(self) -> None:
-        return None
-
-    def auth_healthcheck(self) -> None:
-        raise RuntimeError("Authenticated workspaces require database persistence.")
-
-    def record_answer(
-        self,
-        workspace_id: str,
-        request: ChatRequest,
-        response: ChatResponse,
-        *,
-        user_id: str | None = None,
-    ) -> str:
-        conversation_id = request.conversation_id or _id("conv")
-        self.history.append(
-            {
-                "workspace_id": workspace_id,
-                "user_id": user_id,
-                "conversation_id": conversation_id,
-                "question": request.question,
-                "answer": response.answer,
-                "citations": [citation.model_dump() for citation in response.citations],
-                "suggested_ticket_reply": response.suggested_ticket_reply,
-                "trace_id": response.trace_id,
-                "needs_escalation": response.needs_escalation,
-                "confidence": response.confidence,
-                "evidence_status": response.evidence_status,
-                "generation_model": response.generation_model,
-            }
-        )
-        return conversation_id
-
-    def record_feedback(
-        self, workspace_id: str, request: FeedbackRequest, *, user_id: str | None = None
-    ) -> None:
-        self.feedback.append(
-            {
-                "workspace_id": workspace_id,
-                "user_id": user_id,
-                **request.model_dump(exclude_none=True),
-            }
-        )
-
-    def list_history(
-        self, workspace_id: str, *, user_id: str | None = None
-    ) -> list[dict]:
-        return [
-            item
-            for item in self.history.read_all()
-            if item.get("workspace_id") == workspace_id
-            and (user_id is None or item.get("user_id") == user_id)
-        ]
-
-    def get_conversation_messages(
-        self,
-        workspace_id: str,
-        conversation_id: str,
-        *,
-        user_id: str | None = None,
-        limit: int = 8,
-    ) -> list[dict]:
-        history = [
-            item
-            for item in self.list_history(workspace_id, user_id=user_id)
-            if item.get("conversation_id") == conversation_id
-        ]
-        if not history:
-            raise ValueError("Conversation is not available in this workspace.")
-        messages: list[dict] = []
-        for item in history:
-            messages.extend(
-                [
-                    {"role": "user", "content": item.get("question", "")},
-                    {"role": "assistant", "content": item.get("answer", "")},
-                ]
-            )
-        return messages[-max(1, limit) :]
-
-    def list_feedback(self, workspace_id: str) -> list[dict]:
-        return [
-            item
-            for item in self.feedback.read_all()
-            if item.get("workspace_id") == workspace_id
-        ]
-
-    def has_workspace_membership(self, user_id: str, workspace_id: str) -> bool:
-        return False
-
-    def get_active_membership(
-        self, user_id: str, workspace_id: str
-    ) -> ActiveMembership | None:
-        return None
-
-    def list_user_workspaces(self, user_id: str) -> list[dict]:
-        return []
-
-    def get_profile(self, user_id: str) -> dict | None:
-        return None
-
-    def create_workspace_for_user(
-        self,
-        user_id: str,
-        *,
-        email: str | None,
-        display_name: str | None,
-        organization_name: str,
-        workspace_name: str,
-    ) -> dict:
-        raise RuntimeError("Workspace registration requires database persistence.")
-
-    def ensure_demo_identity(
-        self, *, user_id: str, email: str, display_name: str, workspace_id: str
-    ) -> None:
-        return None
 
 
 class DatabaseProductRepository:
@@ -931,99 +770,13 @@ class DatabaseProductRepository:
             )
         return {"id": workspace_id, "name": workspace_name}
 
-    def ensure_demo_identity(
-        self, *, user_id: str, email: str, display_name: str, workspace_id: str
-    ) -> None:
-        from sqlalchemy import insert, select
-
-        now = _utcnow()
-        organization_id = "grounddesk-demo"
-        with self._operation() as connection:
-            if (
-                connection.execute(
-                    select(self.profiles.c.user_id).where(
-                        self.profiles.c.user_id == user_id
-                    )
-                ).first()
-                is None
-            ):
-                connection.execute(
-                    insert(self.profiles).values(
-                        user_id=user_id,
-                        email=email,
-                        display_name=display_name,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-            if (
-                connection.execute(
-                    select(self.organizations.c.id).where(
-                        self.organizations.c.id == organization_id
-                    )
-                ).first()
-                is None
-            ):
-                connection.execute(
-                    insert(self.organizations).values(
-                        id=organization_id,
-                        name="GroundDesk Demo",
-                        slug="grounddesk-demo",
-                        created_by=user_id,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-            if (
-                connection.execute(
-                    select(self.workspaces.c.id).where(
-                        self.workspaces.c.id == workspace_id
-                    )
-                ).first()
-                is None
-            ):
-                connection.execute(
-                    insert(self.workspaces).values(
-                        id=workspace_id,
-                        name="Demo Workspace",
-                        organization_id=organization_id,
-                        slug="demo",
-                        status="active",
-                        created_by=user_id,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-            if (
-                connection.execute(
-                    select(self.memberships.c.id).where(
-                        self.memberships.c.workspace_id == workspace_id,
-                        self.memberships.c.user_id == user_id,
-                    )
-                ).first()
-                is None
-            ):
-                connection.execute(
-                    insert(self.memberships).values(
-                        id="membership_grounddesk_demo",
-                        workspace_id=workspace_id,
-                        user_id=user_id,
-                        role=WorkspaceRole.OWNER.value,
-                        status="active",
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-
 
 def create_product_repository(settings, *, database_runtime=None) -> ProductRepository:
-    if settings.persistence_backend.lower() == "database":
-        return DatabaseProductRepository(
-            settings.database_url,
-            auto_create=settings.database_auto_create,
-            engine=database_runtime.engine if database_runtime is not None else None,
-        )
-    return JsonlProductRepository(settings.feedback_path, settings.chat_history_path)
+    return DatabaseProductRepository(
+        settings.database_url,
+        auto_create=settings.database_auto_create,
+        engine=database_runtime.engine if database_runtime is not None else None,
+    )
 
 
 def analytics_for(repository: ProductRepository, workspace_id: str) -> dict:

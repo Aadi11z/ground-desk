@@ -14,7 +14,7 @@ def _settings(tmp_path) -> Settings:
         _env_file=None,
         app_environment="test",
         data_dir=tmp_path / "data",
-        sample_dir=tmp_path / "sample_corpus",
+        corpus_dir=tmp_path / "corpus",
         embedding_provider="hashing",
         embedding_model="hashing",
         embedding_dimensions=(384,),
@@ -23,10 +23,8 @@ def _settings(tmp_path) -> Settings:
         persistence_backend="database",
         database_url=f"sqlite:///{tmp_path / 'grounddesk.sqlite'}",
         database_auto_create=True,
-        auth_mode="supabase",
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-key",
-        demo_bootstrap_sample_corpus=False,
     )
 
 

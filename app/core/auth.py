@@ -1,9 +1,4 @@
-"""Authenticated workspace resolution for GroundDesk.
-
-The public portfolio mode is deliberately restricted to one demo workspace.
-The B2B mode validates Supabase access tokens server-side and then authorizes
-workspace access through durable membership records.
-"""
+"""Supabase-authenticated workspace resolution for GroundDesk."""
 
 from __future__ import annotations
 
@@ -13,7 +8,6 @@ from typing import Protocol
 from jwt import InvalidTokenError, PyJWKClient, decode
 from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 
-from app.domain.permissions import WorkspaceRole
 from app.domain.tenancy import TenantScope
 
 from .workspace import normalize_workspace_id
@@ -98,46 +92,36 @@ class AccessController:
     def __init__(self, settings, repository, verifier: UserVerifier | None = None):
         self.settings = settings
         self.repository = repository
-        self.mode = settings.auth_mode.lower()
         self.verifier = verifier
-        if self.mode == "supabase" and self.verifier is None:
-            supabase_url = settings.supabase_url_value
+        if self.verifier is None:
+            self.validate_configuration()
+            supabase_url = self.settings.supabase_url_value
             self.verifier = SupabaseUserVerifier(
-                supabase_url or "", settings.supabase_jwt_audience
+                supabase_url, self.settings.supabase_jwt_audience
             )
 
     def healthcheck_configuration(self) -> None:
-        self._validate_configuration()
-        if self.mode == "supabase":
-            self.repository.auth_healthcheck()
+        self.validate_configuration()
+        self.repository.auth_healthcheck()
 
-    def _validate_configuration(self) -> None:
-        if self.mode == "demo":
-            return
-        if self.mode != "supabase":
-            raise RuntimeError("AUTH_MODE must be either demo or supabase.")
-        if self.settings.persistence_backend.lower() != "database":
+    def validate_configuration(self) -> None:
+        """Verify that the application can authorize Supabase users."""
+        self.validate_settings(self.settings)
+
+    @staticmethod
+    def validate_settings(settings) -> None:
+        """Fail before constructing external clients from incomplete settings."""
+        if settings.persistence_backend.lower() != "database":
             raise RuntimeError(
-                "AUTH_MODE=supabase requires PERSISTENCE_BACKEND=database."
+                "Supabase authentication requires PERSISTENCE_BACKEND=database."
             )
-        if (
-            not self.settings.supabase_url_value
-            or not self.settings.supabase_publishable_key
-        ):
+        if not settings.supabase_url_value or not settings.supabase_publishable_key:
             raise RuntimeError(
-                "AUTH_MODE=supabase requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY."
+                "Supabase authentication requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY."
             )
 
     def authenticate(self, authorization: str | None) -> AuthenticatedUser:
-        if self.mode == "demo":
-            if authorization != "Bearer grounddesk-demo-session":
-                raise AccessError(401, "Sign in to access the demo workspace.")
-            return AuthenticatedUser(
-                user_id=self.settings.demo_user_id,
-                email=self.settings.demo_user_email,
-                display_name=self.settings.demo_user_name,
-            )
-        self._validate_configuration()
+        self.validate_configuration()
         if not authorization or not authorization.startswith("Bearer "):
             raise AccessError(401, "Authorization Bearer token is required.")
         token = authorization.removeprefix("Bearer ").strip()
@@ -153,22 +137,9 @@ class AccessController:
         require_authenticated: bool = False,
     ) -> AccessContext:
         try:
-            workspace_id = normalize_workspace_id(
-                requested_workspace_id, default=self.settings.default_workspace_id
-            )
+            workspace_id = normalize_workspace_id(requested_workspace_id, default=None)
         except ValueError as exc:
             raise AccessError(400, str(exc)) from exc
-
-        if self.mode == "demo":
-            user = self.authenticate(authorization)
-            if workspace_id != self.settings.default_workspace_id:
-                raise AccessError(404, "Workspace is not available.")
-            return AccessContext(
-                workspace_id=self.settings.default_workspace_id,
-                user_id=user.user_id,
-                role=WorkspaceRole.OWNER,
-                email=user.email,
-            )
 
         user = self.authenticate(authorization)
         membership = self.repository.get_active_membership(user.user_id, workspace_id)

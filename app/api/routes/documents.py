@@ -12,7 +12,7 @@ from app.api.dependencies import (
     require_document_reader,
 )
 from app.core.auth import AccessContext
-from app.core.models import DocumentIngestResponse, DocumentPreview, UrlIngestRequest
+from app.core.models import DocumentIngestResponse, DocumentPreview
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -106,21 +106,6 @@ async def replace_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         tmp_path.unlink(missing_ok=True)
-    return _response(record)
-
-
-@router.post("/url", response_model=DocumentIngestResponse)
-def ingest_url(
-    request: UrlIngestRequest,
-    context: AccessContext = Depends(require_document_manager),
-    ingestion_service=Depends(get_ingestion_service),
-) -> DocumentIngestResponse:
-    try:
-        record = ingestion_service.ingest_url(
-            context, request.url, metadata={"workspace_id": context.workspace_id}
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _response(record)
 
 

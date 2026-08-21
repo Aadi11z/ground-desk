@@ -7,10 +7,8 @@ from app.core.auth import (
     AccessError,
     AuthenticatedUser,
 )
-from app.core.workspace import normalize_workspace_id
 from app.domain.permissions import Permission
 from app.infrastructure.config import Settings
-from app.infrastructure.config import settings as compatibility_settings
 
 
 def get_services(request: Request) -> AppServices:
@@ -43,26 +41,6 @@ def get_product_repository(
 ):
     repository = get_services(request).product_repository
     return repository.bind_session(session) if session is not None else repository
-
-
-def require_admin(
-    request: Request,
-    x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
-) -> None:
-    admin_api_key = get_app_settings(request).admin_api_key_value
-    if not admin_api_key:
-        raise HTTPException(status_code=404, detail="Management endpoints are disabled")
-    if x_admin_api_key != admin_api_key:
-        raise HTTPException(status_code=401, detail="Missing or invalid admin API key.")
-
-
-def _workspace_id(value: str | None) -> str:
-    try:
-        return normalize_workspace_id(
-            value, default=compatibility_settings.default_workspace_id
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def normal_access_context(
@@ -168,10 +146,6 @@ def get_ingestion_service(request: Request):
 
 def get_agent(request: Request):
     return get_services(request).agent
-
-
-def get_workflows(request: Request):
-    return get_services(request).workflows
 
 
 def get_access_controller(request: Request):

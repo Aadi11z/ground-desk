@@ -7,9 +7,8 @@
 │ ChatRequest                │ Input to the chat endpoint and support agent                       │
 │ ChatResponse               │ Generated answer, citations, evidence status, escalation result    │
 │ DocumentRecord             │ Full document ingestion/listing representation                     │
-│ DocumentIngestResponse     │ Compact response after upload or URL ingestion                     │
+│ DocumentIngestResponse     │ Compact response after upload                                      │
 │ DocumentPreview            │ Extracted, authorized text preview for the product interface        │
-│ UrlIngestRequest           │ URL input payload                                                  │
 │ HealthResponse             │ API health/status output                                           │
 │ WorkflowRequest            │ Input for support workflow endpoints                               │
 │ ConversationSummaryRequest │ Conversation messages supplied for summarization                   │
@@ -93,10 +92,6 @@ class DocumentPreview(BaseModel):
     original_filename: str | None = None
     text: str
     truncated: bool = False
-
-
-class UrlIngestRequest(BaseModel):
-    url: str = Field(min_length=1)
 
 
 class HealthResponse(BaseModel):

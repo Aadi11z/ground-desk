@@ -75,7 +75,6 @@ def test_access_controller_derives_role_from_active_membership_not_jwt_metadata(
     user_id = "11111111-1111-1111-1111-111111111111"
     settings = Settings(
         _env_file=None,
-        auth_mode="supabase",
         persistence_backend="database",
         database_url="sqlite://",
         supabase_url="https://example.supabase.co",
@@ -103,7 +102,6 @@ def test_access_controller_derives_role_from_active_membership_not_jwt_metadata(
 def test_inaccessible_workspace_is_not_distinguished_from_a_missing_workspace():
     settings = Settings(
         _env_file=None,
-        auth_mode="supabase",
         persistence_backend="database",
         database_url="sqlite://",
         supabase_url="https://example.supabase.co",
@@ -114,23 +112,6 @@ def test_inaccessible_workspace_is_not_distinguished_from_a_missing_workspace():
     with pytest.raises(AccessError) as exc_info:
         controller.resolve(
             authorization="Bearer valid-token", requested_workspace_id="unknown"
-        )
-
-    assert exc_info.value.status_code == 404
-
-
-def test_demo_inaccessible_workspace_is_opaque_not_forbidden():
-    settings = Settings(
-        _env_file=None,
-        auth_mode="demo",
-        default_workspace_id="demo",
-    )
-    controller = AccessController(settings, _Repository(None))
-
-    with pytest.raises(AccessError) as exc_info:
-        controller.resolve(
-            authorization="Bearer grounddesk-demo-session",
-            requested_workspace_id="another-workspace",
         )
 
     assert exc_info.value.status_code == 404

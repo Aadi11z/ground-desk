@@ -20,11 +20,15 @@ def _scope(workspace_id: str) -> TenantScope:
     )
 
 
-def _services(tmp_path, *, retrieval_mode: str = "hybrid"):
+def _services(
+    tmp_path,
+    *,
+    retrieval_mode: str = "hybrid",
+):
     settings = Settings(
         _env_file=None,
         data_dir=tmp_path / "data",
-        sample_dir=tmp_path / "samples",
+        corpus_dir=tmp_path / "corpus",
         embedding_provider="hashing",
         embedding_model="hashing",
         embedding_dimensions=(384,),

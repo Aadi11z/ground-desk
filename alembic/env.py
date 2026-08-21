@@ -8,6 +8,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.core.database import normalize_database_url
 
 config = context.config
 
@@ -33,7 +34,7 @@ def database_url() -> str:
             "DATABASE_MIGRATION_URL or DATABASE_URL is required. "
             "Set one or pass -x database-url=<url>."
         )
-    return url
+    return normalize_database_url(url)
 
 
 def run_migrations_offline() -> None:

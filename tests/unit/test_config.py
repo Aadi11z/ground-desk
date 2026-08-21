@@ -19,16 +19,48 @@ def test_settings_parse_comma_separated_values_without_dotenv(tmp_path):
     assert settings.documents_dir == tmp_path / "data" / "documents"
 
 
-def test_production_settings_reject_demo_fallbacks():
-    with pytest.raises(ValidationError, match="AUTH_MODE=supabase"):
-        Settings(_env_file=None, app_environment="production")
+def test_production_settings_require_hosted_dependencies():
+    with pytest.raises(ValidationError, match="DATABASE_URL"):
+        Settings(
+            _env_file=None,
+            app_environment="production",
+            database_url="",
+            admin_api_key=None,
+        )
+
+
+def test_supabase_settings_require_database_and_disable_runtime_schema_creation():
+    with pytest.raises(ValidationError, match="DATABASE_URL"):
+        Settings(
+            _env_file=None,
+            app_environment="production",
+            persistence_backend="database",
+            database_url="",
+            supabase_url="http://127.0.0.1:54321",
+            supabase_publishable_key="local-key",
+            vector_store_backend="qdrant",
+            qdrant_url="http://127.0.0.1:6333",
+            admin_api_key=None,
+        )
+
+    with pytest.raises(ValidationError, match="DATABASE_AUTO_CREATE=false"):
+        Settings(
+            _env_file=None,
+            app_environment="production",
+            persistence_backend="database",
+            database_url="postgresql+psycopg://grounddesk:password@127.0.0.1:54322/postgres",
+            database_auto_create=True,
+            supabase_url="http://127.0.0.1:54321",
+            supabase_publishable_key="local-key",
+            vector_store_backend="qdrant",
+            qdrant_url="http://127.0.0.1:6333",
+        )
 
 
 def test_production_settings_accept_explicit_hosted_configuration():
     settings = Settings(
         _env_file=None,
         app_environment="production",
-        auth_mode="supabase",
         persistence_backend="database",
         database_url="postgresql+psycopg://grounddesk:password@db.example/grounddesk",
         supabase_url="https://grounddesk.supabase.co",
