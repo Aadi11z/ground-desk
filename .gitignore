@@ -1,6 +1,9 @@
 # Environment
 .env
 .venv/
+frontend/node_modules/
+frontend/dist/
+supabase/.branches/
 
 # Python
 __pycache__/
@@ -18,6 +21,7 @@ __pycache__/
 /presentation/
 /graphify-out/
 /docs/
+/research
 
 # OS
 .DS_Store
